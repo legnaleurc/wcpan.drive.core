@@ -9,7 +9,6 @@ import sqlite3
 
 from .exceptions import CacheError
 from .types import Node, NodeDict, ChangeDict, PathOrString
-from .util import node_from_dict
 
 
 SQL_CREATE_TABLES = [
@@ -377,7 +376,7 @@ def apply_changes(
                 inner_delete_node_by_id(query, change['id'])
                 continue
 
-            node = node_from_dict(change['node'])
+            node = Node.from_dict(change['node'])
             inner_insert_node(query, node)
 
         inner_set_metadata(query, 'check_point', check_point)
@@ -532,7 +531,7 @@ def inner_get_node_by_id(
     rv = query.fetchall()
     node['private'] = None if not rv else {_['key']: _['value'] for _ in rv}
 
-    node = node_from_dict(node)
+    node = Node.from_dict(node)
     return node
 
 

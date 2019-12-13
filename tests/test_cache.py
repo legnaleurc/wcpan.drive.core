@@ -7,12 +7,12 @@ import tempfile
 import unittest as ut
 import unittest.mock as utm
 
+from wcpan.drive.core.types import Node
 from wcpan.drive.core.cache import (
     ReadOnly,
     ReadWrite,
     Cache,
     CacheError,
-    node_from_dict,
 )
 from wcpan.drive.core.util import create_executor
 
@@ -169,7 +169,7 @@ def inner_insert(query):
 
 async def initialize_nodes(db):
     data = create_root()
-    node = node_from_dict(data)
+    node = Node.from_dict(data)
     await db.insert_node(node)
 
     data = [

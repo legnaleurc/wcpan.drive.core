@@ -8,7 +8,6 @@ from wcpan.drive.core.abc import (
     WritableFile,
 )
 from wcpan.drive.core.types import Node, ChangeDict, PrivateDict
-from wcpan.drive.core.cache import node_from_dict
 
 from .util import create_root
 
@@ -42,7 +41,7 @@ class FakeDriver(RemoteDriver):
 
     async def fetch_root_node(self) -> Node:
         data = create_root()
-        node = node_from_dict(data)
+        node = Node.from_dict(data)
         return node
 
     async def fetch_changes(self,
