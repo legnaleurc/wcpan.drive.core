@@ -8,9 +8,10 @@ import signal
 import sys
 
 from wcpan.logger import EXCEPTION
+import arrow
 import yaml
 
-from .types import Node
+from .types import Node, NodeDict
 from .abc import RemoteDriver, WritableFile, ReadableFile
 from .exceptions import (
     DownloadError,
@@ -78,6 +79,47 @@ def resolve_path(from_: pathlib.PurePath, to: pathlib.PurePath):
         else:
             rv = rv / part
     return rv
+
+
+def node_from_dict(dict_: NodeDict) -> Node:
+    return Node(
+        id_=dict_['id'],
+        name=dict_['name'],
+        trashed=bool(dict_['trashed']),
+        created=arrow.get(dict_['created']),
+        modified=arrow.get(dict_['modified']),
+        parent_list=dict_.get('parent_list', None),
+        is_folder=dict_['is_folder'],
+        mime_type=dict_['mime_type'],
+        hash_=dict_['hash'],
+        size=dict_['size'],
+        image=dict_['image'],
+        video=dict_['video'],
+        private=dict_.get('private', None),
+    )
+
+
+def dict_from_node(node):
+    return {
+        'id': node.id_,
+        'parent_id': node.parent_id,
+        'name': node.name,
+        'trashed': node.trashed,
+        'is_folder': node.is_folder,
+        'created': node.created.isoformat(),
+        'modified': node.modified.isoformat(),
+        'mime_type': node.mime_type,
+        'hash': node.hash_,
+        'size': node.size,
+        'is_image': node.is_image,
+        'image_width': node.image_width,
+        'image_height': node.image_height,
+        'is_video': node.is_video,
+        'video_width': node.video_width,
+        'video_height': node.video_height,
+        'video_ms_duration': node.video_ms_duration,
+        'private': node.private,
+    }
 
 
 async def download_to_local_by_id(

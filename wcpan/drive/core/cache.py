@@ -7,10 +7,9 @@ import pathlib
 import re
 import sqlite3
 
-import arrow
-
 from .exceptions import CacheError
 from .types import Node, NodeDict, ChangeDict
+from .util import node_from_dict
 
 
 SQL_CREATE_TABLES = [
@@ -175,47 +174,6 @@ class Cache(object):
     async def _bg(self, fn, *args):
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(self._pool, fn, self._dsn, *args)
-
-
-def node_from_dict(data: NodeDict) -> Node:
-    return Node(
-        id_=data['id'],
-        name=data['name'],
-        trashed=bool(data['trashed']),
-        created=arrow.get(data['created']),
-        modified=arrow.get(data['modified']),
-        parent_list=data.get('parent_list', None),
-        is_folder=data['is_folder'],
-        mime_type=data['mime_type'],
-        hash_=data['hash'],
-        size=data['size'],
-        image=data['image'],
-        video=data['video'],
-        private=data.get('private', None),
-    )
-
-
-# DEPRECATED
-def dict_from_node(node):
-    return {
-        'id': node.id_,
-        'parent_id': node.parent_id,
-        'name': node.name,
-        'trashed': node.trashed,
-        'is_folder': node.is_folder,
-        'created': node.created.isoformat(),
-        'modified': node.modified.isoformat(),
-        'mime_type': node.mime_type,
-        'hash': node.hash_,
-        'size': node.size,
-        'is_image': node.is_image,
-        'image_width': node.image_width,
-        'image_height': node.image_height,
-        'is_video': node.is_video,
-        'video_width': node.video_width,
-        'video_height': node.video_height,
-        'video_ms_duration': node.video_ms_duration,
-    }
 
 
 class Database(object):
