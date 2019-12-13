@@ -237,9 +237,13 @@ class Drive(object):
         if not folder_name:
             raise TypeError('invalid folder name')
 
-        node = await self.get_node_by_name_from_parent(folder_name, parent_node)
-        if node:
-            raise NodeConflictedError(node)
+        if not exist_ok:
+            node = await self.get_node_by_name_from_parent(
+                folder_name,
+                parent_node,
+            )
+            if node:
+                raise NodeConflictedError(node)
 
         fn = self._context.create_folder(self._remote.create_folder)
         return await fn(parent_node, folder_name, None, exist_ok)
