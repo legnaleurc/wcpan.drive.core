@@ -1,4 +1,4 @@
-from typing import List, TypedDict
+from typing import List, TypedDict, BinaryIO
 import concurrent.futures
 import mimetypes
 import multiprocessing
@@ -243,7 +243,7 @@ async def upload_from_local(
     return node
 
 
-async def upload_feed(fin, fout) -> None:
+async def upload_feed(fin: BinaryIO, fout: BinaryIO) -> None:
     while True:
         chunk = fin.read(CHUNK_SIZE)
         if not chunk:
@@ -251,7 +251,7 @@ async def upload_feed(fin, fout) -> None:
         await fout.write(chunk)
 
 
-async def upload_continue(fin, fout) -> None:
+async def upload_continue(fin: BinaryIO, fout: BinaryIO) -> None:
     offset = await fout.tell()
     await fout.seek(offset)
     fin.seek(offset, os.SEEK_SET)
