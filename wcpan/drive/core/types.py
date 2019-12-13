@@ -42,6 +42,24 @@ class NodeDict(TypedDict):
 
 class Node(object):
 
+    @staticmethod
+    def from_dict(dict_: NodeDict) -> 'Node':
+        return Node(
+            id_=dict_['id'],
+            name=dict_['name'],
+            trashed=bool(dict_['trashed']),
+            created=arrow.get(dict_['created']),
+            modified=arrow.get(dict_['modified']),
+            parent_list=dict_.get('parent_list', None),
+            is_folder=dict_['is_folder'],
+            mime_type=dict_['mime_type'],
+            hash_=dict_['hash'],
+            size=dict_['size'],
+            image=dict_['image'],
+            video=dict_['video'],
+            private=dict_.get('private', None),
+        )
+
     def __init__(self,
         *,
         id_: str,
@@ -194,6 +212,40 @@ class Node(object):
             video=self._video if video is None else video,
             private=self.private if private is None else private,
         )
+
+    def to_dict(self) -> NodeDict:
+        dict_ = {
+            'id': self.id_,
+            'name': self.name,
+            'trashed': self.trashed,
+            'is_folder': self.is_folder,
+            'created': self.created.isoformat(),
+            'modified': self.modified.isoformat(),
+            'parent_list': self.parent_list.copy(),
+            'mime_type': self.mime_type,
+            'hash': self.hash_,
+            'size': self.size,
+        }
+        if not self.is_image:
+            dict_['image'] = None
+        else:
+            dict_['image'] = {
+                'width': self.image_width,
+                'height': self.image_height,
+            }
+        if not self.is_video:
+            dict_['video'] = None
+        else:
+            dict_['video'] = {
+                'width': self.video_width,
+                'height': self.video_height,
+                'ms_duration': self.video_ms_duration,
+            }
+        if not self.private:
+            dict_['private'] = None
+        else:
+            dict_['private'] = self.private.copy()
+        return dict_
 
 
 class RemoveChangeDict(TypedDict):
