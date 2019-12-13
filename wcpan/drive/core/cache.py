@@ -8,7 +8,7 @@ import re
 import sqlite3
 
 from .exceptions import CacheError
-from .types import Node, NodeDict, ChangeDict
+from .types import Node, NodeDict, ChangeDict, PathOrString
 from .util import node_from_dict
 
 
@@ -128,7 +128,7 @@ class Cache(object):
     async def get_node_by_id(self, node_id: str) -> Optional[Node]:
         return await self._bg(get_node_by_id, node_id)
 
-    async def get_node_by_path(self, path: str) -> Optional[Node]:
+    async def get_node_by_path(self, path: PathOrString) -> Optional[Node]:
         path = pathlib.PurePath(path)
         parts = list(path.parts)
         if parts[0] != '/':

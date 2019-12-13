@@ -1,6 +1,10 @@
 from typing import TypedDict, List, Optional, Literal, Union, Dict, Protocol
+import os
 
 import arrow
+
+
+PathOrString = Union[str, os.PathLike]
 
 
 class ImageDict(TypedDict):

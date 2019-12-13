@@ -11,7 +11,7 @@ from wcpan.logger import EXCEPTION
 import arrow
 import yaml
 
-from .types import Node, NodeDict
+from .types import Node, NodeDict, PathOrString
 from .abc import RemoteDriver, WritableFile, ReadableFile
 from .exceptions import (
     DownloadError,
@@ -40,18 +40,18 @@ def get_default_configuration() -> ConfigurationDict:
     }
 
 
-def get_default_config_path() -> str:
+def get_default_config_path() -> pathlib.Path:
     path = pathlib.Path('~/.config')
     path = path.expanduser()
     path = path / 'wcpan.drive'
-    return str(path)
+    return path
 
 
-def get_default_data_path() -> str:
+def get_default_data_path() -> pathlib.Path:
     path = pathlib.Path('~/.local/share')
     path = path.expanduser()
     path = path / 'wcpan.drive'
-    return str(path)
+    return path
 
 
 def create_executor() -> concurrent.futures.Executor:
@@ -69,7 +69,10 @@ def signal_handler(*args, **kwargs):
     sys.exit()
 
 
-def resolve_path(from_: pathlib.PurePath, to: pathlib.PurePath):
+def resolve_path(
+    from_: pathlib.PurePath,
+    to: pathlib.PurePath,
+) -> pathlib.PurePath:
     rv = from_
     for part in to.parts:
         if part == '.':
@@ -125,13 +128,17 @@ def dict_from_node(node):
 async def download_to_local_by_id(
     drive: 'Drive',
     node_id: str,
-    path: str,
-) -> str:
+    path: PathOrString,
+) -> pathlib.Path:
     node = await drive.get_node_by_id(node_id)
     return await download_to_local(drive, node, path)
 
 
-async def download_to_local(drive: 'Drive', node: Node, path: str) -> str:
+async def download_to_local(
+    drive: 'Drive',
+    node: Node,
+    path: PathOrString,
+) -> pathlib.Path:
     file_ = pathlib.Path(path)
     if not file_.is_dir():
         raise ValueError(f'{path} does not exist')
@@ -181,13 +188,13 @@ async def download_to_local(drive: 'Drive', node: Node, path: str) -> str:
     # rename it back if completed
     os.rename(tmp_path, complete_path)
 
-    return str(complete_path)
+    return complete_path
 
 
 async def upload_from_local_by_id(
     drive: 'Drive',
     parent_id: str,
-    file_path: str,
+    file_path: PathOrString,
     exist_ok: bool = False,
 ) -> Node:
     node = await drive.get_node_by_id(parent_id)
@@ -197,7 +204,7 @@ async def upload_from_local_by_id(
 async def upload_from_local(
     drive: 'Drive',
     parent_node: Node,
-    file_path: str,
+    file_path: PathOrString,
     exist_ok: bool = False,
 ) -> Node:
     # sanity check

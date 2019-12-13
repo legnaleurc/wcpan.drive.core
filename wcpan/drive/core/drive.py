@@ -28,6 +28,7 @@ from .types import (
     GetHasherFunction,
     Node,
     NodeDict,
+    PathOrString,
     RenameNodeFunction,
     UploadFunction,
 )
@@ -46,8 +47,8 @@ DRIVER_VERSION = 1
 class Context(object):
 
     def __init__(self,
-        config_path: str,
-        data_path: str,
+        config_path: pathlib.Path,
+        data_path: pathlib.Path,
         database_dsn: str,
         driver_class: RemoteDriver,
         middleware_list: List[Middleware],
@@ -169,7 +170,7 @@ class Drive(object):
     async def get_node_by_id(self, node_id: str) -> Node:
         return await self._db.get_node_by_id(node_id)
 
-    async def get_node_by_path(self, path: str) -> Node:
+    async def get_node_by_path(self, path: PathOrString) -> Node:
         return await self._db.get_node_by_path(path)
 
     async def get_path(self, node: Node) -> str:
@@ -333,7 +334,10 @@ class Drive(object):
         fn = self._context.rename_node(self._remote.rename_node)
         return await fn(node, new_parent, new_name)
 
-    async def rename_node_by_path(self, src_path: str, dst_path: str) -> Node:
+    async def rename_node_by_path(self,
+        src_path: PathOrString,
+        dst_path: PathOrString,
+    ) -> Node:
         '''
         Rename or move `src_path` to `dst_path`. `dst_path` can be a file name
         or an absolute path.
@@ -351,6 +355,8 @@ class Drive(object):
         if not node:
             raise NodeNotFoundError(src_path)
 
+        src_path = str(src_path)
+        dst_path = str(dst_path)
         src = pathlib.PurePath(src_path)
         dst = pathlib.PurePath(dst_path)
 
@@ -427,11 +433,11 @@ class DriveFactory(object):
         self._driver = None
         self._middleware_list = []
 
-    def set_config_path(self, config_path: str) -> None:
-        self._config_path = config_path
+    def set_config_path(self, config_path: PathOrString) -> None:
+        self._config_path = pathlib.Path(config_path)
 
-    def set_data_path(self, data_path: str) -> None:
-        self._data_path = data_path
+    def set_data_path(self, data_path: PathOrString) -> None:
+        self._data_path = pathlib.Path(data_path)
 
     def set_database(self, dsn: str) -> None:
         self._database = dsn
@@ -443,8 +449,7 @@ class DriveFactory(object):
         self._middleware_list.append(middleware_name)
 
     def load_config(self) -> None:
-        config_path = pathlib.Path(self._config_path)
-        config_file_path = config_path / 'main.yaml'
+        config_file_path = self._config_path / 'main.yaml'
 
         with config_file_path.open('r') as fin:
             config_dict = yaml.safe_load(fin)
