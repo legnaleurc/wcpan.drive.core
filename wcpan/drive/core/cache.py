@@ -128,11 +128,7 @@ class Cache(object):
         return await self._bg(get_node_by_id, node_id)
 
     async def get_node_by_path(self, path: pathlib.PurePath) -> Optional[Node]:
-        if not path.is_absolute():
-            raise ValueError('only accepts absolute path')
-
-        root_id = await self.get_root_id()
-        return await self._bg(get_node_by_path, root_id, path)
+        return await self._bg(get_node_by_path, path)
 
     async def get_path_by_id(self, node_id: str) -> Optional[pathlib.PurePath]:
         return await self._bg(get_path_by_id, node_id)
@@ -245,11 +241,7 @@ def initialize(dsn: str):
 def get_metadata(dsn: str, key: str) -> str:
     with Database(dsn) as db, \
          ReadOnly(db) as query:
-        query.execute('SELECT value FROM metadata WHERE key = ?;', (key,))
-        rv = query.fetchone()
-    if not rv:
-        raise KeyError
-    return rv['value']
+        return inner_get_metadata(query, key)
 
 
 def set_metadata(dsn: str, key: str, value: str) -> None:
@@ -266,13 +258,13 @@ def get_node_by_id(dsn: str, node_id: str) -> Optional[Node]:
 
 def get_node_by_path(
     dsn: str,
-    root_id: str,
     path: pathlib.PurePath,
 ) -> Optional[Node]:
-    node_id = root_id
     parts = path.parts[1:]
     with Database(dsn) as db, \
          ReadOnly(db) as query:
+        node_id = inner_get_metadata(query, 'root_id')
+
         for part in parts:
             query.execute('''
                 SELECT nodes.id AS id
@@ -453,6 +445,14 @@ def find_multiple_parents_nodes(dsn: str) -> List[Node]:
         rv = query.fetchall()
         rv = [inner_get_node_by_id(query, _['child']) for _ in rv]
     return rv
+
+
+def inner_get_metadata(query: sqlite3.Cursor, key: str) -> str:
+    query.execute('SELECT value FROM metadata WHERE key = ?;', (key,))
+    rv = query.fetchone()
+    if not rv:
+        raise KeyError(key)
+    return rv['value']
 
 
 def inner_set_metadata(query: sqlite3.Cursor, key: str, value: str) -> None:
