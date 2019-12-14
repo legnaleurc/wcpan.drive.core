@@ -104,7 +104,7 @@ async def download_to_local(
     # check if exists
     complete_path = file_.joinpath(node.name)
     if complete_path.is_file():
-        return str(complete_path)
+        return complete_path
 
     # exists but not a file
     if complete_path.exists():
@@ -113,7 +113,7 @@ async def download_to_local(
     # if the file is empty, no need to download
     if node.size <= 0:
         open(complete_path, 'w').close()
-        return str(complete_path)
+        return complete_path
 
     # resume download
     tmp_path = complete_path.parent.joinpath(f'{complete_path.name}.__tmp__')
