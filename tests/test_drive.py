@@ -39,7 +39,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
             factory.set_config_path(config_path)
             factory.set_data_path(data_path)
             factory.set_database('nodes.db')
-            factory.set_driver('tests.driver')
+            factory.set_driver('tests')
             self._drive = await stack.enter_async_context(
                 factory.create_drive()
             )

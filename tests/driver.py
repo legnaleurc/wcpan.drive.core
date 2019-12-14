@@ -115,6 +115,3 @@ class FakeDriver(RemoteDriver):
     @property
     def get_hasher_mock(self) -> Mock:
         return self._gh_mock
-
-
-Driver = FakeDriver
