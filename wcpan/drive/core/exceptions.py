@@ -15,17 +15,7 @@ class InvalidMiddlewareError(DriveError):
 
 # NOTE *MUST* be picklable
 class CacheError(DriveError):
-
-    def __init__(self, message: str) -> None:
-        super(CacheError, self).__init__()
-
-        self._message = message
-
-    def __str__(self) -> str:
-        return self._message
-
-    def __reduce__(self):
-        return type(self), (self._message,)
+    pass
 
 
 class InvalidNameError(DriveError):
@@ -74,55 +64,25 @@ class NodeNotFoundError(NodeTreeError):
 
 
 class RootNodeError(NodeTreeError):
-
-    def __init__(self, message: str) -> None:
-        self._message = message
-
-    def __str__(self) -> str:
-        return self._message
+    pass
 
 
 class TrashedNodeError(NodeTreeError):
-
-    def __init__(self, message: str) -> None:
-        self._message = message
-
-    def __str__(self) -> str:
-        return self._message
+    pass
 
 
 class ParentIsNotFolderError(NodeTreeError):
-
-    def __init__(self, message: str) -> None:
-        self._message = message
-
-    def __str__(self) -> str:
-        return self._message
+    pass
 
 
 class LineageError(NodeTreeError):
-
-    def __init__(self, message: str) -> None:
-        self._message = message
-
-    def __str__(self) -> str:
-        return self._message
+    pass
 
 
 class DownloadError(DriveError):
-
-    def __init__(self, message: str) -> None:
-        self._message = message
-
-    def __str__(self) -> str:
-        return self._message
+    pass
 
 
 class UploadError(DriveError):
-
-    def __init__(self, message: str) -> None:
-        self._message = message
-
-    def __str__(self) -> str:
-        return self._message
+    pass
 
