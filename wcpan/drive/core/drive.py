@@ -431,32 +431,14 @@ class Drive(object):
 class DriveFactory(object):
 
     def __init__(self) -> None:
-        self._config_path = get_default_config_path()
-        self._data_path = get_default_data_path()
-        self._database = None
-        self._driver = None
-        self._middleware_list = []
-
-    def set_config_path(self, config_path: PathOrString) -> None:
-        self._config_path = pathlib.Path(config_path)
-
-    def set_data_path(self, data_path: PathOrString) -> None:
-        self._data_path = pathlib.Path(data_path)
-
-    def set_database(self, dsn: str) -> None:
-        self._database = dsn
-
-    def set_driver(self, module_name: str) -> None:
-        self._driver = module_name
-
-    def prepend_middleware(self, middleware_name: str) -> None:
-        self._middleware_list.insert(0, middleware_name)
-
-    def append_middleware(self, middleware_name: str) -> None:
-        self._middleware_list.append(middleware_name)
+        self.config_path = get_default_config_path()
+        self.data_path = get_default_data_path()
+        self.database = None
+        self.driver = None
+        self.middleware_list = []
 
     def load_config(self) -> None:
-        config_file_path = self._config_path / 'main.yaml'
+        config_file_path = self.config_path / 'core.yaml'
 
         with config_file_path.open('r') as fin:
             config_dict = yaml.safe_load(fin)
@@ -465,28 +447,26 @@ class DriveFactory(object):
             if key not in config_dict:
                 raise ValueError(f'no required key: {key}')
 
-        if not self._database:
-            self.set_driver(config_dict['database'])
-        if not self._driver:
-            self.set_driver(config_dict['driver'])
-        self._middleware_list.extend(config_dict['middleware'])
+        self.database = config_dict['database']
+        self.driver = config_dict['driver']
+        self.middleware_list.extend(config_dict['middleware'])
 
-    def create_drive(self, pool: concurrent.futures.Executor = None) -> Drive:
+    def __call__(self, pool: concurrent.futures.Executor = None) -> Drive:
         # TODO use real dsn
-        path = pathlib.Path(self._database)
+        path = pathlib.Path(self.database)
         if not path.is_absolute():
-            path = pathlib.PurePath(self._data_path) / path
+            path = pathlib.PurePath(self.data_path) / path
         dsn = str(path)
 
         ilim = importlib.import_module
-        module = ilim('.export', self._driver)
+        module = ilim('.export', self.driver)
         driver_class = module.RemoteDriver
         min_, max_ = driver_class.get_version_range()
         if not min_ <= DRIVER_VERSION <= max_:
             raise InvalidRemoteDriverError()
 
         middleware_list = []
-        for middleware in self._middleware_list:
+        for middleware in self.middleware_list:
             module = ilim('.export', middleware)
             middleware_class = module.Middleware
             min_, max_ = middleware_class.get_version_range()
@@ -496,8 +476,8 @@ class DriveFactory(object):
             middleware_list.append(middleware)
 
         context = Context(
-            config_path=self._config_path,
-            data_path=self._data_path,
+            config_path=self.config_path,
+            data_path=self.data_path,
             database_dsn=dsn,
             driver_class=driver_class,
             middleware_list=middleware_list,
