@@ -455,6 +455,10 @@ class DriveFactory(object):
         self.middleware_list.extend(config_dict['middleware'])
 
     def __call__(self, pool: concurrent.futures.Executor = None) -> Drive:
+        # ensure we can access the folders
+        self.config_path.mkdir(parents=True, exist_ok=True)
+        self.data_path.mkdir(parents=True, exist_ok=True)
+
         # TODO use real dsn
         path = pathlib.Path(self.database)
         if not path.is_absolute():
