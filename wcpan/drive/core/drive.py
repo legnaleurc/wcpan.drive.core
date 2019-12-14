@@ -37,6 +37,7 @@ from .util import (
     create_executor,
     get_default_config_path,
     get_default_data_path,
+    normalize_path,
     resolve_path,
 )
 
@@ -172,8 +173,7 @@ class Drive(object):
 
     async def get_node_by_path(self, path: PathOrString) -> Optional[Node]:
         path = pathlib.PurePath(path)
-        if not path.is_absolute():
-            raise ValueError('only accepts absolute path')
+        path = normalize_path(path)
         return await self._db.get_node_by_path(path)
 
     async def get_path(self, node: Node) -> Optional[pathlib.PurePath]:
