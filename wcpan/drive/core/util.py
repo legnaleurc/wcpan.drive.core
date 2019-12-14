@@ -84,7 +84,16 @@ def resolve_path(
 
 
 def normalize_path(path: pathlib.PurePath) -> pathlib.PurePath:
+    if not path.is_absolute():
+        raise ValueError('only accepts absolute path')
     rv = []
+    for part in path.parts:
+        if part == '.':
+            continue
+        elif part == '..' and rv[-1] != '/':
+            rv.pop()
+        else:
+            rv.append(part)
     return pathlib.PurePath(*rv)
 
 
