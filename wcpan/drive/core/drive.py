@@ -459,7 +459,7 @@ class DriveFactory(object):
         dsn = str(path)
 
         ilim = importlib.import_module
-        module = ilim('.export', self.driver)
+        module = ilim('.exports', self.driver)
         driver_class = module.RemoteDriver
         min_, max_ = driver_class.get_version_range()
         if not min_ <= DRIVER_VERSION <= max_:
@@ -467,7 +467,7 @@ class DriveFactory(object):
 
         middleware_list = []
         for middleware in self.middleware_list:
-            module = ilim('.export', middleware)
+            module = ilim('.exports', middleware)
             middleware_class = module.Middleware
             min_, max_ = middleware_class.get_version_range()
             if not min_ <= DRIVER_VERSION <= max_:
