@@ -1,5 +1,13 @@
 from abc import ABCMeta, abstractmethod
-from typing import AsyncGenerator, Tuple, List, AsyncIterator, Optional
+from typing import (
+    AsyncGenerator,
+    AsyncIterator,
+    List,
+    Optional,
+    Tuple,
+    Type,
+)
+from types import TracebackType
 
 from .types import (
     ChangeDict,
@@ -25,7 +33,11 @@ class ReadableFile(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    async def __aexit__(self, exc_type, exc_value, traceback) -> bool:
+    async def __aexit__(self,
+        et: Optional[Type[BaseException]],
+        ev: Optional[BaseException],
+        tb: Optional[TracebackType],
+    ) -> bool:
         pass
 
     @abstractmethod
@@ -67,7 +79,11 @@ class WritableFile(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    async def __aexit__(self, exc_type, exc_value, traceback) -> bool:
+    async def __aexit__(self,
+        et: Optional[Type[BaseException]],
+        ev: Optional[BaseException],
+        tb: Optional[TracebackType],
+    ) -> bool:
         pass
 
     @abstractmethod
@@ -99,7 +115,11 @@ class RemoteDriver(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    async def __aexit__(self, exc_type, exc_value, traceback) -> bool:
+    async def __aexit__(self,
+        et: Optional[Type[BaseException]],
+        ev: Optional[BaseException],
+        tb: Optional[TracebackType],
+    ) -> bool:
         pass
 
     @abstractmethod
