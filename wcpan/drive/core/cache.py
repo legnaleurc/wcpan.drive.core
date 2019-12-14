@@ -8,7 +8,7 @@ import re
 import sqlite3
 
 from .exceptions import CacheError
-from .types import Node, NodeDict, ChangeDict, PathOrString
+from .types import Node, NodeDict, ChangeDict
 
 
 SQL_CREATE_TABLES = [
@@ -127,17 +127,14 @@ class Cache(object):
     async def get_node_by_id(self, node_id: str) -> Optional[Node]:
         return await self._bg(get_node_by_id, node_id)
 
-    async def get_node_by_path(self, path: PathOrString) -> Optional[Node]:
-        path = pathlib.PurePath(path)
-        parts = list(path.parts)
-        if parts[0] != '/':
-            raise ValueError('invalid path')
+    async def get_node_by_path(self, path: pathlib.PurePath) -> Optional[Node]:
+        if not path.is_absolute():
+            raise ValueError('only accepts absolute path')
 
         root_id = await self.get_root_id()
-        parts.pop(0)
-        return await self._bg(get_node_by_path, root_id, parts)
+        return await self._bg(get_node_by_path, root_id, path)
 
-    async def get_path_by_id(self, node_id: str) -> Optional[str]:
+    async def get_path_by_id(self, node_id: str) -> Optional[pathlib.PurePath]:
         return await self._bg(get_path_by_id, node_id)
 
     async def get_node_by_name_from_parent_id(self,
@@ -270,10 +267,10 @@ def get_node_by_id(dsn: str, node_id: str) -> Optional[Node]:
 def get_node_by_path(
     dsn: str,
     root_id: str,
-    path_parts: List[str],
+    path: pathlib.PurePath,
 ) -> Optional[Node]:
     node_id = root_id
-    parts = path_parts
+    parts = path.parts[1:]
     with Database(dsn) as db, \
          ReadOnly(db) as query:
         for part in parts:
@@ -292,7 +289,7 @@ def get_node_by_path(
     return node
 
 
-def get_path_by_id(dsn: str, node_id: str) -> Optional[str]:
+def get_path_by_id(dsn: str, node_id: str) -> Optional[pathlib.PurePath]:
     parts = []
     with Database(dsn) as db, \
          ReadOnly(db) as query:
@@ -324,7 +321,7 @@ def get_path_by_id(dsn: str, node_id: str) -> Optional[str]:
             node_id = rv['parent']
 
     path = pathlib.PurePath(*parts)
-    return str(path)
+    return path
 
 
 def get_node_by_name_from_parent_id(

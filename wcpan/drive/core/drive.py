@@ -170,10 +170,11 @@ class Drive(object):
     async def get_node_by_id(self, node_id: str) -> Node:
         return await self._db.get_node_by_id(node_id)
 
-    async def get_node_by_path(self, path: PathOrString) -> Node:
+    async def get_node_by_path(self, path: PathOrString) -> Optional[Node]:
+        path = pathlib.PurePath(path)
         return await self._db.get_node_by_path(path)
 
-    async def get_path(self, node: Node) -> str:
+    async def get_path(self, node: Node) -> Optional[pathlib.PurePath]:
         return await self._db.get_path_by_id(node.id_)
 
     async def get_path_by_id(self, node_id: str) -> str:

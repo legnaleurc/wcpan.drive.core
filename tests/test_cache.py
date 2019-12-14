@@ -122,7 +122,7 @@ class TestNodeCache(ut.IsolatedAsyncioTestCase):
         node = nodes[0]
         self.assertEqual(node.id_, '__F1_ID__')
         path = await self._db.get_path_by_id(node.id_)
-        self.assertEqual(path, '/d1/f1')
+        self.assertEqual(str(path), '/d1/f1')
 
     async def testGetInvalidPath(self):
         with self.assertRaises(CacheError):

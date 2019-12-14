@@ -83,6 +83,11 @@ def resolve_path(
     return rv
 
 
+def normalize_path(path: pathlib.PurePath) -> pathlib.PurePath:
+    rv = []
+    return pathlib.PurePath(*rv)
+
+
 async def download_to_local_by_id(
     drive: 'Drive',
     node_id: str,
