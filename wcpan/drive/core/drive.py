@@ -434,11 +434,27 @@ class Drive(object):
 class DriveFactory(object):
 
     def __init__(self) -> None:
-        self.config_path = get_default_config_path()
-        self.data_path = get_default_data_path()
+        self._config_path = get_default_config_path()
+        self._data_path = get_default_data_path()
         self.database = None
         self.driver = None
         self.middleware_list = []
+
+    @property
+    def config_path(self) -> pathlib.Path:
+        return self._config_path
+
+    @config_path.setter
+    def config_path(self, path: PathOrString) -> None:
+        self._config_path = pathlib.Path(path)
+
+    @property
+    def data_path(self) -> pathlib.Path:
+        return self._data_path
+
+    @data_path.setter
+    def data_path(self, path: PathOrString) -> None:
+        self._data_path = pathlib.Path(path)
 
     def load_config(self) -> None:
         config_file_path = self.config_path / 'core.yaml'
