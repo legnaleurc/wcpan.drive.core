@@ -449,7 +449,10 @@ class DriveFactory(object):
     def set_driver(self, module_name: str) -> None:
         self._driver = module_name
 
-    def add_middleware(self, middleware_name: str) -> None:
+    def prepend_middleware(self, middleware_name: str) -> None:
+        self._middleware_list.insert(0, middleware_name)
+
+    def append_middleware(self, middleware_name: str) -> None:
         self._middleware_list.append(middleware_name)
 
     def load_config(self) -> None:
@@ -466,8 +469,7 @@ class DriveFactory(object):
             self.set_driver(config_dict['database'])
         if not self._driver:
             self.set_driver(config_dict['driver'])
-        if not self._middleware_list:
-            self._middleware_list = config_dict['middleware']
+        self._middleware_list.extend(config_dict['middleware'])
 
     def create_drive(self, pool: concurrent.futures.Executor = None) -> Drive:
         # TODO use real dsn
