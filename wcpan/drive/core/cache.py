@@ -495,7 +495,7 @@ def inner_get_node_by_id(
         WHERE child=?
     ;''', (node_id,))
     rv = query.fetchall()
-    node['parent_list'] = None if not rv else [_['parent'] for _ in rv]
+    node['parent_list'] = [_['parent'] for _ in rv]
 
     query.execute('''
         SELECT width, height

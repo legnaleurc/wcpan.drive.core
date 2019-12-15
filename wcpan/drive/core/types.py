@@ -50,7 +50,7 @@ class Node(object):
             trashed=bool(dict_['trashed']),
             created=arrow.get(dict_['created']),
             modified=arrow.get(dict_['modified']),
-            parent_list=dict_.get('parent_list', None),
+            parent_list=dict_.get('parent_list', []),
             is_folder=dict_['is_folder'],
             mime_type=dict_['mime_type'],
             hash_=dict_['hash'],
