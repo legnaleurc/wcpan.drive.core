@@ -457,6 +457,9 @@ class DriveFactory(object):
         self._data_path = pathlib.Path(path)
 
     def load_config(self) -> None:
+        # ensure we can access the folder
+        self.config_path.mkdir(parents=True, exist_ok=True)
+
         config_file_path = self.config_path / 'core.yaml'
 
         with config_file_path.open('r') as fin:
