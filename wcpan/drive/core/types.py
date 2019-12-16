@@ -266,11 +266,11 @@ ChangeDict = Union[RemoveChangeDict, UpdateChangeDict]
 class MediaInfo(object):
 
     @staticmethod
-    def image(self, width: int, height: int) -> 'MediaInfo':
+    def image(width: int, height: int) -> 'MediaInfo':
         return MediaInfo(is_image=True, width=width, height=height)
 
     @staticmethod
-    def video(self, width: int, height: int, ms_duration: int) -> 'MediaInfo':
+    def video(width: int, height: int, ms_duration: int) -> 'MediaInfo':
         return MediaInfo(
             is_video=True,
             width=width,
