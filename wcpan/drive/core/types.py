@@ -263,6 +263,56 @@ class UpdateChangeDict(TypedDict):
 ChangeDict = Union[RemoveChangeDict, UpdateChangeDict]
 
 
+class MediaInfo(object):
+
+    @staticmethod
+    def image(self, width: int, height: int) -> 'MediaInfo':
+        return MediaInfo(is_image=True, width=width, height=height)
+
+    @staticmethod
+    def video(self, width: int, height: int, ms_duration: int) -> 'MediaInfo':
+        return MediaInfo(
+            is_video=True,
+            width=width,
+            height=height,
+            ms_duration=ms_duration,
+        )
+
+    def __init__(self,
+        *,
+        is_image: bool = False,
+        is_video: bool = False,
+        width: int = 0,
+        height: int = 0,
+        ms_duration: int = 0,
+    ) -> None:
+        self._is_image = is_image
+        self._is_video = is_video
+        self._width = width
+        self._height = height
+        self._ms_duration = ms_duration
+
+    @property
+    def is_image(self) -> bool:
+        return self._is_image
+
+    @property
+    def is_video(self) -> bool:
+        return self._is_video
+
+    @property
+    def width(self) -> int:
+        return self._width
+
+    @property
+    def height(self) -> int:
+        return self._height
+
+    @property
+    def ms_duration(self) -> int:
+        return self._ms_duration
+
+
 class RenameNodeFunction(Protocol):
 
     async def __call__(self,
@@ -286,6 +336,7 @@ class UploadFunction(Protocol):
         file_name: str,
         file_size: Optional[int],
         mime_type: Optional[str],
+        media_info: Optional[MediaInfo],
         private: Optional[PrivateDict],
     ) -> 'WritableFile':
         pass

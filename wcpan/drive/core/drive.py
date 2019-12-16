@@ -26,6 +26,7 @@ from .types import (
     CreateFolderFunction,
     DownloadFunction,
     GetHasherFunction,
+    MediaInfo,
     Node,
     NodeDict,
     PathOrString,
@@ -268,17 +269,27 @@ class Drive(object):
     async def upload_by_id(self,
         parent_id: str,
         file_name: str,
+        *,
         file_size: int = None,
         mime_type: str = None,
+        media_info: MediaInfo = None,
     ) -> WritableFile:
         node = await self.get_node_by_id(parent_id)
-        return await self.upload(node, file_name, file_size, mime_type)
+        return await self.upload(
+            node,
+            file_name,
+            file_size=file_size,
+            mime_type=mime_type,
+            media_info=media_info,
+        )
 
     async def upload(self,
         parent_node: Node,
         file_name: str,
+        *,
         file_size: int = None,
         mime_type: str = None,
+        media_info: MediaInfo = None,
     ) -> WritableFile:
         # sanity check
         if not parent_node:
@@ -293,7 +304,7 @@ class Drive(object):
             raise NodeConflictedError(node)
 
         fn = self._context.upload(self._remote.upload)
-        return await fn(parent_node, file_name, file_size, mime_type, None)
+        return await fn(parent_node, file_name, file_size, mime_type, media_info, None)
 
     async def trash_node_by_id(self, node_id: str) -> None:
         node = await self.get_node_by_id(node_id)

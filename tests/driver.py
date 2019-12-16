@@ -7,7 +7,7 @@ from wcpan.drive.core.abc import (
     RemoteDriver,
     WritableFile,
 )
-from wcpan.drive.core.types import Node, ChangeDict, PrivateDict
+from wcpan.drive.core.types import Node, ChangeDict, PrivateDict, MediaInfo
 
 from .util import create_root
 
@@ -79,9 +79,17 @@ class FakeDriver(RemoteDriver):
         file_name: str,
         file_size: Optional[int],
         mime_type: Optional[str],
+        media_info: Optional[MediaInfo],
         private: Optional[PrivateDict],
     ) -> WritableFile:
-        self._u_mock(parent_node, file_name, file_size, mime_type, private)
+        self._u_mock(
+            parent_node,
+            file_name,
+            file_size,
+            mime_type,
+            media_info,
+            private,
+        )
         return
 
     async def get_hasher(self) -> Hasher:

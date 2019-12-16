@@ -1,4 +1,4 @@
-from typing import List, TypedDict, BinaryIO
+from typing import List, TypedDict, BinaryIO, Optional
 import concurrent.futures
 import mimetypes
 import multiprocessing
@@ -10,7 +10,7 @@ import sys
 from wcpan.logger import EXCEPTION
 import yaml
 
-from .types import Node, NodeDict, PathOrString
+from .types import Node, NodeDict, PathOrString, MediaInfo
 from .abc import RemoteDriver, WritableFile, ReadableFile
 from .exceptions import (
     DownloadError,
@@ -167,16 +167,26 @@ async def upload_from_local_by_id(
     drive: 'Drive',
     parent_id: str,
     file_path: PathOrString,
+    media_info: Optional[MediaInfo],
+    *,
     exist_ok: bool = False,
 ) -> Node:
     node = await drive.get_node_by_id(parent_id)
-    return await upload_from_local(drive, node, file_path, exist_ok)
+    return await upload_from_local(
+        drive,
+        node,
+        file_path,
+        media_info,
+        exist_ok=exist_ok,
+    )
 
 
 async def upload_from_local(
     drive: 'Drive',
     parent_node: Node,
     file_path: PathOrString,
+    media_info: Optional[MediaInfo],
+    *,
     exist_ok: bool = False,
 ) -> Node:
     # sanity check
@@ -189,10 +199,13 @@ async def upload_from_local(
     mt, _ = mimetypes.guess_type(file_path)
 
     try:
-        fout = await drive.upload(parent_node=parent_node,
-                                  file_name=file_name,
-                                  file_size=total_file_size,
-                                  mime_type=mt)
+        fout = await drive.upload(
+            parent_node=parent_node,
+            file_name=file_name,
+            file_size=total_file_size,
+            mime_type=mt,
+            media_info=media_info,
+        )
     except NodeConflictedError as e:
         if not exist_ok:
             raise

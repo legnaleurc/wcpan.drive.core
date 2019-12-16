@@ -478,11 +478,18 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # good calls
         await api(node, 'name_3')
-        mock.assert_called_once_with(node, 'name_3', None, None, None)
+        mock.assert_called_once_with(node, 'name_3', None, None, None, None)
         mock.reset_mock()
 
-        await api(node, 'name_3', 123, 'test/plain')
-        mock.assert_called_once_with(node, 'name_3', 123, 'test/plain', None)
+        await api(node, 'name_3', file_size=123, mime_type='test/plain')
+        mock.assert_called_once_with(
+            node,
+            'name_3',
+            123,
+            'test/plain',
+            None,
+            None,
+        )
         mock.reset_mock()
 
     async def testGetHasher(self):

@@ -14,6 +14,7 @@ from .types import (
     CreateFolderFunction,
     DownloadFunction,
     GetHasherFunction,
+    MediaInfo,
     Node,
     NodeDict,
     PrivateDict,
@@ -207,6 +208,7 @@ class Middleware(metaclass=ABCMeta):
         file_name: str,
         file_size: Optional[int],
         mime_type: Optional[str],
+        media_info: Optional[MediaInfo],
         private: Optional[PrivateDict],
     ) -> WritableFile:
         pass
