@@ -304,7 +304,14 @@ class Drive(object):
             raise NodeConflictedError(node)
 
         fn = self._context.upload(self._remote.upload)
-        return await fn(parent_node, file_name, file_size, mime_type, media_info, None)
+        return await fn(
+            parent_node,
+            file_name,
+            file_size=file_size,
+            mime_type=mime_type,
+            media_info=media_info,
+            private=None,
+        )
 
     async def trash_node_by_id(self, node_id: str) -> None:
         node = await self.get_node_by_id(node_id)
