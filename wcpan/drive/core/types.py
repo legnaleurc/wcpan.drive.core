@@ -334,6 +334,7 @@ class UploadFunction(Protocol):
     async def __call__(self,
         parent_node: Node,
         file_name: str,
+        *,
         file_size: Optional[int],
         mime_type: Optional[str],
         media_info: Optional[MediaInfo],
