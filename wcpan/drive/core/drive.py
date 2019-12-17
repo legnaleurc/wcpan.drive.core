@@ -499,7 +499,7 @@ class DriveFactory(object):
         # TODO use real dsn
         path = pathlib.Path(self.database)
         if not path.is_absolute():
-            path = pathlib.PurePath(self.data_path) / path
+            path = self.data_path / path
         dsn = str(path)
 
         ilim = importlib.import_module
