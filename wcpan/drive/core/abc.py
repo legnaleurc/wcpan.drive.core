@@ -100,7 +100,7 @@ class WritableFile(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    async def node(self) -> Node:
+    async def node(self) -> Optional[Node]:
         pass
 
 
