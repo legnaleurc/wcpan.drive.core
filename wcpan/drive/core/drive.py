@@ -359,6 +359,15 @@ class Drive(object):
         fn = self._context.rename_node(self._remote.rename_node)
         return await fn(node, new_parent, new_name)
 
+    async def rename_node_by_id(self,
+        node_id: str,
+        new_parent_id: str = None,
+        new_name: str = None,
+    ) -> Node:
+        node = await self.get_node_by_id(node_id)
+        new_parent = await self.get_node_by_id(new_parent_id)
+        return await self.rename_node(node, new_parent, new_name)
+
     async def rename_node_by_path(self,
         src_path: PathOrString,
         dst_path: PathOrString,
