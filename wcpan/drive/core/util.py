@@ -61,11 +61,7 @@ def create_executor() -> concurrent.futures.Executor:
 
 
 def initialize_worker() -> None:
-    signal.signal(signal.SIGINT, signal_handler)
-
-
-def signal_handler(*args, **kwargs):
-    sys.exit()
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
 def resolve_path(
