@@ -292,6 +292,13 @@ class MediaInfo(object):
         self._height = height
         self._ms_duration = ms_duration
 
+    def __str__(self) -> str:
+        if self.is_image:
+            return f'MediaInfo(is_image=True, width={self.width}, height={self.height})'
+        if self.is_video:
+            return f'MediaInfo(is_video=True, width={self.width}, height={self.height}, ms_duration={self.ms_duration})'
+        return 'MediaInfo()'
+
     @property
     def is_image(self) -> bool:
         return self._is_image
