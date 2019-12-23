@@ -205,10 +205,11 @@ class ReadWrite(object):
         return self._cursor
 
     def __exit__(self, type_, value, traceback) -> bool:
-        if type_ is None:
-            self._db.commit()
-        else:
-            self._db.rollback()
+        if self._db.in_transaction:
+            if type_ is None:
+                self._db.commit()
+            else:
+                self._db.rollback()
         self._cursor.close()
 
 
