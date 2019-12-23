@@ -398,7 +398,8 @@ class Drive(object):
 
             async for next_, changes in self._remote.fetch_changes(check_point):
                 if not dry_run:
-                    await self._db.apply_changes(changes, next_)
+                    with self._db.session() as session:
+                        session.apply_changes(changes, next_)
 
                 for change in changes:
                     yield change

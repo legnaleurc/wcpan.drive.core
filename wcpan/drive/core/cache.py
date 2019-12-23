@@ -161,8 +161,8 @@ class Cache(object):
     async def find_multiple_parents_nodes(self) -> List[Node]:
         return await self._bg(find_multiple_parents_nodes)
 
-    def session(self):
-        return
+    def session(self) -> 'Session':
+        return Session(self._dsn)
 
     async def _bg(self, fn, *args):
         loop = asyncio.get_running_loop()
@@ -230,6 +230,9 @@ class Session(object):
         return self
 
     def __exit__(self, et, ev, tb) -> bool:
+        if et or ev or tb:
+            task = Task(action='rollback')
+            self._queue.put(task)
         self._queue.put(None)
         self._queue.join()
         self._child.join()
