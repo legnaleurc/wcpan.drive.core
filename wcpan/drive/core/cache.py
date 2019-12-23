@@ -235,7 +235,6 @@ class Session(object):
             task = Task(action='rollback')
             self._queue.put(task)
         self._queue.put(None)
-        self._queue.join()
         self._child.join()
 
     def apply_changes(self,

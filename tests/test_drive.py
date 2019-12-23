@@ -86,24 +86,24 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(node.mime_type, 'text/plain')
 
         # TODO
-        # # atomic
-        # builder.reset()
-        # builder.update(create_file(
-        #     'id_3',
-        #     'name_3',
-        #     'id_1',
-        #     3,
-        #     'hash_3',
-        #     'text/plain',
-        # ))
-        # driver.set_changes('3', builder.changes)
+        # atomic
+        builder.reset()
+        builder.update(create_file(
+            'id_3',
+            'name_3',
+            'id_1',
+            3,
+            'hash_3',
+            'text/plain',
+        ))
+        driver.set_changes('3', builder.changes)
 
-        # with self.assertRaises(Exception):
-        #     async for change in self._drive.sync():
-        #         raise Exception('interrupt')
+        with self.assertRaises(Exception):
+            async for change in self._drive.sync():
+                raise Exception('interrupt')
 
-        # node = await self._drive.get_node_by_path('/name_1/name_3')
-        # self.assertIsNone(node)
+        node = await self._drive.get_node_by_path('/name_1/name_3')
+        self.assertIsNone(node)
 
         # image and video
         builder.reset()
