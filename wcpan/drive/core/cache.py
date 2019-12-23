@@ -277,7 +277,8 @@ class Task(object):
 
 
 def oop_session(queue: multiprocessing.JoinableQueue, dsn: str) -> None:
-    with Database(dsn) as db:
+    with Database(dsn) as db, \
+         ReadWrite(db) as query:
         while True:
             task = queue.get()
             if not task:
@@ -287,7 +288,7 @@ def oop_session(queue: multiprocessing.JoinableQueue, dsn: str) -> None:
                 if task.action == 'rollback':
                     db.rollback()
                 elif task.action == 'apply_changes':
-                    pass
+                    inner_apply_changes(query, *task.args, **task.kwargs)
                 else:
                     pass
             finally:
