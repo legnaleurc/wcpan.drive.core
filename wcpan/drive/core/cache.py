@@ -226,7 +226,8 @@ class Session(object):
 
     def __enter__(self) -> 'Session':
         self._queue = multiprocessing.JoinableQueue()
-        self._child = multiprocessing.Process()
+        self._child = multiprocessing.Process(target=oop_session, args=(self._queue, self._dsn))
+        self._child.start()
         return self
 
     def __exit__(self, et, ev, tb) -> bool:
