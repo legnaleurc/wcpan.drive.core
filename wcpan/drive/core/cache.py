@@ -154,9 +154,6 @@ class Cache(object):
     async def find_nodes_by_regex(self, pattern: str) -> List[Node]:
         return await self._bg(find_nodes_by_regex, pattern)
 
-    async def find_duplicate_nodes(self) -> List[Node]:
-        return await self._bg(find_duplicate_nodes)
-
     async def find_orphan_nodes(self) -> List[Node]:
         return await self._bg(find_orphan_nodes)
 
@@ -388,34 +385,6 @@ def find_nodes_by_regex(dsn: str, pattern: str) -> List[Node]:
         query.execute('SELECT id FROM nodes WHERE name REGEXP ?;', (pattern,))
         rv = query.fetchall()
         rv = [inner_get_node_by_id(query, _['id']) for _ in rv]
-    return rv
-
-
-def find_duplicate_nodes(dsn: str) -> List[Node]:
-    with Database(dsn) as db, \
-         ReadOnly(db) as query:
-        query.execute('''
-            SELECT nodes.name AS name, parentage.parent as parent_id
-            FROM nodes
-                INNER JOIN parentage ON parentage.child=nodes.id
-            GROUP BY parentage.parent, nodes.name
-            HAVING COUNT(*) > 1
-        ;''')
-        name_parent_pair = query.fetchall()
-
-        node_id_list = []
-        for pair in name_parent_pair:
-            query.execute('''
-                SELECT nodes.id AS id
-                FROM nodes
-                    INNER JOIN parentage ON parentage.child=nodes.id
-                WHERE parentage.parent=? AND nodes.name=?
-            ;''', (pair['parent_id'], pair['name']))
-            rv = query.fetchall()
-            rv = (_['id'] for _ in rv)
-            node_id_list.extend(rv)
-
-        rv = [inner_get_node_by_id(query, _) for _ in node_id_list]
     return rv
 
 

@@ -204,9 +204,6 @@ class Drive(object):
     async def find_nodes_by_regex(self, pattern: str) -> List[Node]:
         return await self._db.find_nodes_by_regex(pattern)
 
-    async def find_duplicate_nodes(self) -> List[Node]:
-        return await self._db.find_duplicate_nodes()
-
     async def find_orphan_nodes(self) -> List[Node]:
         return await self._db.find_orphan_nodes()
 

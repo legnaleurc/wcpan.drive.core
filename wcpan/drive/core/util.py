@@ -236,3 +236,26 @@ async def upload_continue(fin: BinaryIO, fout: BinaryIO) -> None:
     offset = await fout.tell()
     await fout.seek(offset)
     fin.seek(offset, os.SEEK_SET)
+
+
+async def find_duplicate_nodes(
+    drive: 'Drive',
+    root_node: Optional[Node],
+) -> List[List[Node]]:
+    if not root_node:
+        root_node = await drive.get_root_node()
+
+    rv = []
+    async for dummy_root, folders, files in drive.walk(root_node):
+        nodes = folders + files
+        seen = {}
+        for node in nodes:
+            if node.name not in seen:
+                seen[node.name] = [node]
+            else:
+                seen[node.name].append(node)
+        for nodes in seen.values():
+            if len(nodes) > 1:
+                rv.append(nodes)
+
+    return rv
