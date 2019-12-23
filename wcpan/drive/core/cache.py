@@ -1,8 +1,9 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any, Tuple
 import asyncio
-import contextlib
 import concurrent.futures
+import contextlib
 import functools
+import multiprocessing
 import pathlib
 import re
 import sqlite3
@@ -160,6 +161,9 @@ class Cache(object):
     async def find_multiple_parents_nodes(self) -> List[Node]:
         return await self._bg(find_multiple_parents_nodes)
 
+    def session(self):
+        return
+
     async def _bg(self, fn, *args):
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(self._pool, fn, self._dsn, *args)
@@ -211,6 +215,80 @@ class ReadWrite(object):
             else:
                 self._db.rollback()
         self._cursor.close()
+
+
+class Session(object):
+
+    def __init__(self, dsn: str) -> None:
+        self._dsn = dsn
+        self._queue = None
+        self._child = None
+
+    def __enter__(self) -> 'Session':
+        self._queue = multiprocessing.JoinableQueue()
+        self._child = multiprocessing.Process()
+        return self
+
+    def __exit__(self, et, ev, tb) -> bool:
+        self._queue.put(None)
+        self._queue.join()
+        self._child.join()
+
+    def apply_changes(self,
+        changes: List[ChangeDict],
+        check_point: str,
+    ) -> None:
+        task = Task(
+            action='apply_changes',
+            kwargs={
+                'changes': changes,
+                'check_point': check_point,
+            },
+        )
+        self._queue.put(task)
+
+
+class Task(object):
+
+    def __init__(self,
+        *,
+        action: str,
+        args: Tuple[Any] = None,
+        kwargs: Dict[str, Any] = None,
+    ) -> None:
+        self._action = action
+        self._args = () if args is None else args
+        self._kwargs = {} if kwargs is None else kwargs
+
+    @property
+    def action(self):
+        return self._action
+
+    @property
+    def args(self):
+        return self._args
+
+    @property
+    def kwargs(self):
+        return self._kwargs
+
+
+def oop_session(queue: multiprocessing.JoinableQueue, dsn: str) -> None:
+    with Database(dsn) as db:
+        while True:
+            task = queue.get()
+            if not task:
+                break
+
+            try:
+                if task.action == 'rollback':
+                    db.rollback()
+                elif task.action == 'apply_changes':
+                    pass
+                else:
+                    pass
+            finally:
+                queue.task_done()
 
 
 def initialize(dsn: str):
@@ -357,16 +435,7 @@ def apply_changes(
 ) -> None:
     with Database(dsn) as db, \
          ReadWrite(db) as query:
-        for change in changes:
-            is_removed = change['removed']
-            if is_removed:
-                inner_delete_node_by_id(query, change['id'])
-                continue
-
-            node = Node.from_dict(change['node'])
-            inner_insert_node(query, node)
-
-        inner_set_metadata(query, 'check_point', check_point)
+        inner_apply_changes(query, changes, check_point)
 
 
 def insert_node(dsn: str, node: Node) -> None:
@@ -607,6 +676,23 @@ def inner_delete_node_by_id(query: sqlite3.Cursor, node_id: str) -> None:
         DELETE FROM nodes
         WHERE id=?
     ;''', (node_id,))
+
+
+def inner_apply_changes(
+    query: sqlite3.Cursor,
+    changes: List[ChangeDict],
+    check_point: str,
+) -> None:
+    for change in changes:
+        is_removed = change['removed']
+        if is_removed:
+            inner_delete_node_by_id(query, change['id'])
+            continue
+
+        node = Node.from_dict(change['node'])
+        inner_insert_node(query, node)
+
+    inner_set_metadata(query, 'check_point', check_point)
 
 
 def sqlite3_regexp(
