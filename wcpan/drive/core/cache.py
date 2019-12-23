@@ -222,11 +222,13 @@ class Session(object):
     def __init__(self, dsn: str) -> None:
         self._dsn = dsn
         self._queue = None
+        self._lock = None
         self._child = None
 
     def __enter__(self) -> 'Session':
         self._queue = multiprocessing.JoinableQueue()
-        self._child = multiprocessing.Process(target=oop_session, args=(self._queue, self._dsn))
+        self._lock = multiprocessing.Condition()
+        self._child = multiprocessing.Process(target=oop_session, args=(self._queue, self._lock, self._dsn))
         self._child.start()
         return self
 
@@ -234,6 +236,8 @@ class Session(object):
         if et or ev or tb:
             task = Task(action='rollback')
             self._queue.put(task)
+            with self._lock:
+                self._lock.wait()
         self._queue.put(None)
         self._child.join()
 
@@ -249,6 +253,8 @@ class Session(object):
             },
         )
         self._queue.put(task)
+        with self._lock:
+            self._lock.wait()
 
 
 class Task(object):
@@ -276,7 +282,7 @@ class Task(object):
         return self._kwargs
 
 
-def oop_session(queue: multiprocessing.JoinableQueue, dsn: str) -> None:
+def oop_session(queue: multiprocessing.JoinableQueue, lock: multiprocessing.Condition, dsn: str) -> None:
     with Database(dsn) as db, \
          ReadWrite(db) as query:
         while True:
@@ -287,8 +293,12 @@ def oop_session(queue: multiprocessing.JoinableQueue, dsn: str) -> None:
             try:
                 if task.action == 'rollback':
                     db.rollback()
+                    with lock:
+                        lock.notify()
                 elif task.action == 'apply_changes':
                     inner_apply_changes(query, *task.args, **task.kwargs)
+                    with lock:
+                        lock.notify()
                 else:
                     pass
             finally:
