@@ -240,7 +240,7 @@ async def upload_continue(fin: BinaryIO, fout: BinaryIO) -> None:
 
 async def find_duplicate_nodes(
     drive: 'Drive',
-    root_node: Optional[Node],
+    root_node: Node = None,
 ) -> List[List[Node]]:
     if not root_node:
         root_node = await drive.get_root_node()
