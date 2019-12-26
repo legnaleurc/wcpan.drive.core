@@ -1,5 +1,6 @@
-from typing import List, TypedDict, BinaryIO, Optional
+from typing import List, TypedDict, BinaryIO, Optional, Type
 import concurrent.futures
+import importlib
 import mimetypes
 import multiprocessing
 import os
@@ -259,3 +260,10 @@ async def find_duplicate_nodes(
                 rv.append(nodes)
 
     return rv
+
+
+def import_class(class_path: str) -> Type:
+    module_path, class_name = class_path.rsplit('.', 1)
+    module = importlib.import_module(module_path)
+    class_ = getattr(module, class_name)
+    return class_

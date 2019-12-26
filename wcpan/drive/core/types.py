@@ -320,48 +320,20 @@ class MediaInfo(object):
         return self._ms_duration
 
 
-class RenameNodeFunction(Protocol):
+class ReadOnlyContext(object):
 
-    async def __call__(self,
-        node: Node,
-        new_parent: Optional[Node],
-        new_name: Optional[str],
-    ) -> Node:
-        pass
-
-
-class DownloadFunction(Protocol):
-
-    async def __call__(self, node: Node) -> 'ReadableFile':
-        pass
-
-
-class UploadFunction(Protocol):
-
-    async def __call__(self,
-        parent_node: Node,
-        file_name: str,
+    def __init__(self,
         *,
-        file_size: Optional[int],
-        mime_type: Optional[str],
-        media_info: Optional[MediaInfo],
-        private: Optional[PrivateDict],
-    ) -> 'WritableFile':
-        pass
+        config_path: os.PathLike,
+        data_path: os.PathLike,
+    ) -> None:
+        self._config_path = config_path
+        self._data_path = data_path
 
+    @property
+    def config_path(self) -> os.PathLike:
+        return self._config_path
 
-class CreateFolderFunction(Protocol):
-
-    async def __call__(self,
-        parent_node: Node,
-        folder_name: str,
-        private: Optional[PrivateDict],
-        exist_ok: bool,
-    ) -> Node:
-        pass
-
-
-class GetHasherFunction(Protocol):
-
-    async def __call__(self) -> 'Hasher':
-        pass
+    @property
+    def data_path(self) -> os.PathLike:
+        return self._data_path

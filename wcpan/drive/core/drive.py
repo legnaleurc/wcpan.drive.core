@@ -1,9 +1,8 @@
-from typing import List, AsyncGenerator, Tuple, Dict, Optional
+from typing import List, AsyncGenerator, Tuple, Dict, Optional, Type
 import asyncio
 import concurrent.futures
 import contextlib
 import functools
-import importlib
 import pathlib
 
 import yaml
@@ -23,21 +22,18 @@ from .exceptions import (
 )
 from .types import (
     ChangeDict,
-    CreateFolderFunction,
-    DownloadFunction,
-    GetHasherFunction,
     MediaInfo,
     Node,
     NodeDict,
     PathOrString,
-    RenameNodeFunction,
-    UploadFunction,
+    ReadOnlyContext,
 )
 from .abc import ReadableFile, WritableFile, Hasher, RemoteDriver, Middleware
 from .util import (
     create_executor,
     get_default_config_path,
     get_default_data_path,
+    import_class,
     normalize_path,
     resolve_path,
 )
@@ -46,21 +42,23 @@ from .util import (
 DRIVER_VERSION = 1
 
 
-class Context(object):
+class PrivateContext(object):
 
     def __init__(self,
         config_path: pathlib.Path,
         data_path: pathlib.Path,
         database_dsn: str,
-        driver_class: RemoteDriver,
-        middleware_list: List[Middleware],
+        driver_class: Type[RemoteDriver],
+        middleware_class_list: List[Type[Middleware]],
         pool: Optional[concurrent.futures.Executor],
     ) -> None:
-        self._config_path = config_path
-        self._data_path = data_path
+        self._context = ReadOnlyContext(
+            config_path=config_path,
+            data_path=data_path,
+        )
         self._database_dsn = database_dsn
         self._driver_class = driver_class
-        self._middleware_list = middleware_list
+        self._middleware_class_list = middleware_class_list
         self._pool = pool
 
     @property
@@ -72,66 +70,18 @@ class Context(object):
         return self._pool
 
     def create_remote_driver(self) -> RemoteDriver:
-        return self._driver_class(
-            self._config_path,
-            self._data_path,
+        driver = functools.reduce(
+            lambda driver, class_: class_(self._context, driver),
+            # bottom-most is the inner-most middleware
+            reversed(self._middleware_class_list),
+            self._driver_class(self._context),
         )
-
-    # pop order
-    async def decode_dict(self, dict_: NodeDict) -> NodeDict:
-        for middleware in reversed(self._middleware_list):
-            dict_ = await middleware.decode_dict(dict_)
-        return dict_
-
-    # push order
-    def rename_node(self, fn: RenameNodeFunction) -> RenameNodeFunction:
-        fn = functools.reduce(
-            lambda rn, middleware: functools.partial(middleware.rename_node, rn),
-            self._middleware_list,
-            fn,
-        )
-        return fn
-
-    # pop order
-    def download(self, fn: DownloadFunction) -> DownloadFunction:
-        fn = functools.reduce(
-            lambda d, middleware: functools.partial(middleware.download, d),
-            reversed(self._middleware_list),
-            fn,
-        )
-        return fn
-
-    # push order
-    def upload(self, fn: UploadFunction) -> UploadFunction:
-        fn = functools.reduce(
-            lambda u, middleware: functools.partial(middleware.upload, u),
-            self._middleware_list,
-            fn,
-        )
-        return fn
-
-    # push order
-    def create_folder(self, fn: CreateFolderFunction) -> CreateFolderFunction:
-        fn = functools.reduce(
-            lambda cf, middleware: functools.partial(middleware.create_folder, cf),
-            self._middleware_list,
-            fn,
-        )
-        return fn
-
-    # push order
-    def get_hasher(self, fn: GetHasherFunction) -> GetHasherFunction:
-        fn = functools.reduce(
-            lambda gh, middleware: functools.partial(middleware.get_hasher, gh),
-            self._middleware_list,
-            fn,
-        )
-        return fn
+        return driver
 
 
 class Drive(object):
 
-    def __init__(self, context: Context) -> None:
+    def __init__(self, context: PrivateContext) -> None:
         self._context = context
         self._sync_lock = asyncio.Lock()
 
@@ -246,8 +196,12 @@ class Drive(object):
             if node:
                 raise NodeConflictedError(node)
 
-        fn = self._context.create_folder(self._remote.create_folder)
-        return await fn(parent_node, folder_name, None, exist_ok)
+        return await self._remote.create_folder(
+            parent_node=parent_node,
+            folder_name=folder_name,
+            private=None,
+            exist_ok=exist_ok,
+        )
 
     async def download_by_id(self, node_id: str) -> ReadableFile:
         node = await self.get_node_by_id(node_id)
@@ -260,8 +214,7 @@ class Drive(object):
         if node.is_folder:
             raise DownloadError('node should be a file')
 
-        fn = self._context.download(self._remote.download)
-        return await fn(node)
+        return await self._remote.download(node)
 
     async def upload_by_id(self,
         parent_id: str,
@@ -271,9 +224,9 @@ class Drive(object):
         mime_type: str = None,
         media_info: MediaInfo = None,
     ) -> WritableFile:
-        node = await self.get_node_by_id(parent_id)
+        parent_node = await self.get_node_by_id(parent_id)
         return await self.upload(
-            node,
+            parent_node,
             file_name,
             file_size=file_size,
             mime_type=mime_type,
@@ -300,8 +253,7 @@ class Drive(object):
         if node:
             raise NodeConflictedError(node)
 
-        fn = self._context.upload(self._remote.upload)
-        return await fn(
+        return await self._remote.upload(
             parent_node,
             file_name,
             file_size=file_size,
@@ -353,8 +305,11 @@ class Drive(object):
                     break
                 ancestor = await self.get_node_by_id(ancestor.parent_id)
 
-        fn = self._context.rename_node(self._remote.rename_node)
-        return await fn(node, new_parent, new_name)
+        return await self._remote.rename_node(
+            node=node,
+            new_parent=new_parent,
+            new_name=new_name,
+        )
 
     async def rename_node_by_id(self,
         node_id: str,
@@ -442,8 +397,6 @@ class Drive(object):
                 await self._db.insert_node(node)
 
             async for next_, changes in self._remote.fetch_changes(check_point):
-                changes = await decode_changes(changes, self._context.decode_dict)
-
                 if not dry_run:
                     await self._db.apply_changes(changes, next_)
 
@@ -451,8 +404,7 @@ class Drive(object):
                     yield change
 
     async def get_hasher(self) -> Hasher:
-        fn = self._context.get_hasher(self._remote.get_hasher)
-        return await fn()
+        return await self._remote.get_hasher()
 
 
 class DriveFactory(object):
@@ -495,7 +447,7 @@ class DriveFactory(object):
 
         self.database = config_dict['database']
         self.driver = config_dict['driver']
-        self.middleware_list.extend(config_dict['middleware'])
+        self.middleware_list = config_dict['middleware']
 
     def __call__(self, pool: concurrent.futures.Executor = None) -> Drive:
         # ensure we can access the folders
@@ -508,38 +460,25 @@ class DriveFactory(object):
             path = self.data_path / path
         dsn = str(path)
 
-        ilim = importlib.import_module
-        module = ilim('.exports', self.driver)
-        driver_class = module.RemoteDriver
+        driver_class = import_class(self.driver)
         min_, max_ = driver_class.get_version_range()
         if not min_ <= DRIVER_VERSION <= max_:
             raise InvalidRemoteDriverError()
 
-        middleware_list = []
+        middleware_class_list = []
         for middleware in self.middleware_list:
-            module = ilim('.exports', middleware)
-            middleware_class = module.Middleware
+            middleware_class = import_class(middleware)
             min_, max_ = middleware_class.get_version_range()
             if not min_ <= DRIVER_VERSION <= max_:
                 raise InvalidMiddlewareError()
-            middleware = module.Middleware()
-            middleware_list.append(middleware)
+            middleware_class_list.append(middleware_class)
 
-        context = Context(
+        context = PrivateContext(
             config_path=self.config_path,
             data_path=self.data_path,
             database_dsn=dsn,
             driver_class=driver_class,
-            middleware_list=middleware_list,
+            middleware_class_list=middleware_class_list,
             pool=pool,
         )
         return Drive(context)
-
-
-async def decode_changes(changes: List[ChangeDict], decode) -> List[ChangeDict]:
-    rv = []
-    for change in changes:
-        if not change['removed']:
-            change['node'] = await decode(change['node'])
-        rv.append(change)
-    return rv

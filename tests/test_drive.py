@@ -39,9 +39,13 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
             factory.config_path = config_path
             factory.data_path = data_path
             factory.database = 'nodes.db'
-            factory.driver = 'tests'
+            factory.driver = 'tests.driver.FakeDriver'
+            factory.middleware_list = [
+                'tests.driver.FakeMiddleware',
+                'tests.driver.FakeMiddleware',
+            ]
             self._drive = await stack.enter_async_context(factory())
-            self._driver = self._drive._remote
+            self._driver = self._drive._remote._driver._driver
 
             self._raii = stack.pop_all()
 

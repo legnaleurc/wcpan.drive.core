@@ -11,15 +11,10 @@ from types import TracebackType
 
 from .types import (
     ChangeDict,
-    CreateFolderFunction,
-    DownloadFunction,
-    GetHasherFunction,
     MediaInfo,
     Node,
     NodeDict,
     PrivateDict,
-    RenameNodeFunction,
-    UploadFunction,
 )
 
 
@@ -168,6 +163,7 @@ class RemoteDriver(metaclass=ABCMeta):
         file_name: str,
         file_size: Optional[int],
         mime_type: Optional[str],
+        media_info: Optional[MediaInfo],
         private: Optional[PrivateDict],
     ) -> WritableFile:
         pass
@@ -177,52 +173,4 @@ class RemoteDriver(metaclass=ABCMeta):
         pass
 
 
-class Middleware(metaclass=ABCMeta):
-
-    @classmethod
-    @abstractmethod
-    def get_version_range(cls) -> Tuple[int, int]:
-        pass
-
-    @abstractmethod
-    async def decode_dict(self, dict_: NodeDict) -> NodeDict:
-        pass
-
-    @abstractmethod
-    async def rename_node(self,
-        fn: RenameNodeFunction,
-        node: Node,
-        new_parent: Optional[Node],
-        new_name: Optional[str],
-    ) -> Node:
-        pass
-
-    @abstractmethod
-    async def download(self, fn: DownloadFunction, node: Node) -> ReadableFile:
-        pass
-
-    @abstractmethod
-    async def upload(self,
-        fn: UploadFunction,
-        parent_node: Node,
-        file_name: str,
-        file_size: Optional[int],
-        mime_type: Optional[str],
-        media_info: Optional[MediaInfo],
-        private: Optional[PrivateDict],
-    ) -> WritableFile:
-        pass
-
-    @abstractmethod
-    async def create_folder(self,
-        fn: CreateFolderFunction,
-        parent_node: Node,
-        folder_name: str,
-        private: Optional[PrivateDict],
-        exist_ok: bool,
-    ) -> Node:
-        pass
-
-    @abstractmethod
-    async def get_hasher(self, fn: GetHasherFunction) -> Hasher:
-        pass
+Middleware = RemoteDriver
