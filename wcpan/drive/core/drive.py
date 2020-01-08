@@ -397,12 +397,14 @@ class Drive(object):
                 await self._db.insert_node(node)
 
             async for next_, changes in self._remote.fetch_changes(check_point):
-                if not dry_run:
+                if dry_run:
+                    for change in changes:
+                        yield change
+                else:
                     with self._db.session() as session:
                         session.apply_changes(changes, next_)
-
-                for change in changes:
-                    yield change
+                        for change in changes:
+                            yield change
 
     async def get_hasher(self) -> Hasher:
         return await self._remote.get_hasher()
