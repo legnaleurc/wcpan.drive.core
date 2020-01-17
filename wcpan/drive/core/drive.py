@@ -162,6 +162,7 @@ class Drive(object):
 
     async def walk(self,
         node: Node,
+        include_trashed: bool = False,
     ) -> AsyncGenerator[Tuple[Node, List[Node], List[Node]], None]:
         if not node.is_folder:
             return
@@ -169,10 +170,21 @@ class Drive(object):
         while q:
             node = q[0]
             del q[0]
+            if not include_trashed and node.trashed:
+                continue
+
             children = await self.get_children(node)
-            folders = list(filter(lambda _: _.is_folder, children))
-            files = list(filter(lambda _: _.is_file, children))
+            folders = []
+            files = []
+            for child in children:
+                if not include_trashed and child.trashed:
+                    continue
+                if child.is_folder:
+                    folders.append(child)
+                else:
+                    files.append(child)
             yield node, folders, files
+
             q.extend(folders)
 
     async def create_folder(self,
