@@ -151,6 +151,9 @@ class Drive(object):
     async def get_children_by_id(self, node_id: str) -> List[Node]:
         return await self._db.get_children_by_id(node_id)
 
+    async def get_trashed_nodes(self) -> List[Node]:
+        return await self._db.get_trashed_nodes()
+
     async def find_nodes_by_regex(self, pattern: str) -> List[Node]:
         return await self._db.find_nodes_by_regex(pattern)
 

@@ -124,6 +124,14 @@ class TestNodeCache(ut.IsolatedAsyncioTestCase):
         path = await self._db.get_path_by_id(node.id_)
         self.assertEqual(str(path), '/d1/f1')
 
+    async def testGetTrashedNodes(self):
+        nodes = await self._db.get_trashed_nodes()
+        self.assertEqual(len(nodes), 1)
+        node = nodes[0]
+        self.assertEqual(node.id_, '__F3_ID__')
+        path = await self._db.get_path_by_id(node.id_)
+        self.assertEqual(str(path), '/d1/f3')
+
     async def testGetInvalidPath(self):
         with self.assertRaises(CacheError):
             await self._db.get_path_by_id('__INVALID_ID__')
@@ -204,4 +212,17 @@ async def initialize_nodes(db):
             ),
         },
     ]
+    trashed_node = create_file(
+        '__F3_ID__',
+        'f3',
+        '__D1_ID__',
+        4321,
+        '__F3_MD5__',
+        'text/plain',
+    )
+    trashed_node['trashed'] = True
+    data.append({
+        'removed': False,
+        'node': trashed_node,
+    })
     await db.apply_changes(data, '2')

@@ -142,6 +142,9 @@ class Cache(object):
     async def get_children_by_id(self, node_id: str) -> List[Node]:
         return await self._bg(get_children_by_id, node_id)
 
+    async def get_trashed_nodes(self) -> List[Node]:
+        return await self._bg(get_trashed_nodes)
+
     async def apply_changes(self,
         changes: List[ChangeDict],
         check_point: str,
@@ -347,6 +350,20 @@ def get_children_by_id(dsn: str, node_id: str) -> List[Node]:
         rv = query.fetchall()
 
         children = [inner_get_node_by_id(query, _['child']) for _ in rv]
+    return children
+
+
+def get_trashed_nodes(dsn: str) -> List[Node]:
+    with Database(dsn) as db, \
+         ReadOnly(db) as query:
+        query.execute('''
+            SELECT id
+            FROM nodes
+            WHERE trashed=?
+        ;''', (True,))
+        rv = query.fetchall()
+
+        children = [inner_get_node_by_id(query, _['id']) for _ in rv]
     return children
 
 
