@@ -16,19 +16,19 @@ async def api_demo():
     factory = DriveFactory()
     # read config file from here
     # default is $HOME/.config/wcpan/drive
-    factory.set_config_path('/tmp/config')
+    factory.config_path = '/tmp/config'
     # put data file to here
     # default is $HOME/.local/share/wcpan/drive
-    factory.set_data_path('/tmp/data')
+    factory.data_path = '/tmp/data'
     # setup cache database, will write to data folder
-    factory.set_database('nodes.sqlite')
-    # setup driver module
-    factory.set_driver('wcpan.drive.google')
+    factory.database = 'nodes.sqlite'
+    # setup driver class
+    factory.driver = 'wcpan.drive.google.driver.GoogleDriver'
     # load config file from config folder
     # this will not overwrite given values
     factory.load_config()
 
-    async with factory.create_drive() as drive:
+    async with factory() as drive:
         # it is important to keep cache in sync
         async for change in drive.sync():
             print(change)
