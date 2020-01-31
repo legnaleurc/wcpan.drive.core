@@ -193,14 +193,14 @@ async def upload_from_local(
 
     file_name = file_.name
     total_file_size = file_.stat().st_size
-    mt, _ = mimetypes.guess_type(file_path)
+    mime_type = get_mime_type(file_path)
 
     try:
         fout = await drive.upload(
             parent_node=parent_node,
             file_name=file_name,
             file_size=total_file_size,
-            mime_type=mt,
+            mime_type=mime_type,
             media_info=media_info,
         )
     except NodeConflictedError as e:
@@ -267,3 +267,10 @@ def import_class(class_path: str) -> Type:
     module = importlib.import_module(module_path)
     class_ = getattr(module, class_name)
     return class_
+
+
+def get_mime_type(path: PathOrString):
+    type_, dummy_encoding = mimetypes.guess_type(path)
+    if not type_:
+        return 'application/octet-stream'
+    return type_
