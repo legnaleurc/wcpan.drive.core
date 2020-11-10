@@ -1,3 +1,9 @@
+from __future__ import annotations
+
+
+__all__ = ('ReadableFile', 'Hasher', 'WritableFile', 'Middleware')
+
+
 from abc import ABCMeta, abstractmethod
 from typing import (
     AsyncGenerator,
@@ -13,7 +19,6 @@ from .types import (
     ChangeDict,
     MediaInfo,
     Node,
-    NodeDict,
     PrivateDict,
 )
 
@@ -25,7 +30,7 @@ class ReadableFile(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    async def __aenter__(self) -> 'ReadableFile':
+    async def __aenter__(self) -> ReadableFile:
         pass
 
     @abstractmethod
@@ -71,7 +76,7 @@ class Hasher(metaclass=ABCMeta):
 class WritableFile(metaclass=ABCMeta):
 
     @abstractmethod
-    async def __aenter__(self) -> 'WritableFile':
+    async def __aenter__(self) -> WritableFile:
         pass
 
     @abstractmethod
@@ -107,7 +112,7 @@ class RemoteDriver(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    async def __aenter__(self) -> 'RemoteDriver':
+    async def __aenter__(self) -> RemoteDriver:
         pass
 
     @abstractmethod
