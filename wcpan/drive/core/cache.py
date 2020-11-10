@@ -1,6 +1,5 @@
-from typing import Dict, List, Optional
+from typing import List, Optional, Pattern
 import asyncio
-import contextlib
 import concurrent.futures
 import functools
 import pathlib
@@ -8,7 +7,7 @@ import re
 import sqlite3
 
 from .exceptions import CacheError
-from .types import Node, NodeDict, ChangeDict
+from .types import Node, ChangeDict
 
 
 SQL_CREATE_TABLES = [
@@ -627,7 +626,7 @@ def inner_delete_node_by_id(query: sqlite3.Cursor, node_id: str) -> None:
 
 
 def sqlite3_regexp(
-    pattern: 'Pattern',
+    pattern: Pattern,
     _: str,
     cell: Optional[str],
 ) -> bool:
