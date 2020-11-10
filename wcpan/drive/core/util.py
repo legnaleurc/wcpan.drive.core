@@ -6,17 +6,13 @@ import multiprocessing
 import os
 import pathlib
 import signal
-import sys
 
 from wcpan.logger import EXCEPTION
-import yaml
 
-from .types import Node, NodeDict, PathOrString, MediaInfo
-from .abc import RemoteDriver, WritableFile, ReadableFile
+from .types import Node, PathOrString, MediaInfo
 from .exceptions import (
     DownloadError,
     NodeConflictedError,
-    NodeNotFoundError,
     UploadError,
 )
 
