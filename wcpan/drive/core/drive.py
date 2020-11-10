@@ -1,4 +1,7 @@
-from typing import List, AsyncGenerator, Tuple, Dict, Optional, Type
+__all__ = ('Drive', 'DriveFactory')
+
+
+from typing import List, AsyncGenerator, Tuple, Optional, Type
 import asyncio
 import concurrent.futures
 import contextlib
@@ -18,13 +21,11 @@ from .exceptions import (
     ParentIsNotFolderError,
     RootNodeError,
     TrashedNodeError,
-    UploadError,
 )
 from .types import (
     ChangeDict,
     MediaInfo,
     Node,
-    NodeDict,
     PathOrString,
     ReadOnlyContext,
 )
@@ -80,6 +81,13 @@ class PrivateContext(object):
 
 
 class Drive(object):
+    '''Interact with the drive.
+
+    Please use DriveFactory to create an instance.
+
+    The core module DOES NOT provide ANY implementation for cloud drive by
+    itself. You need a driver class, which can be set in DriveFactory.
+    '''
 
     def __init__(self, context: PrivateContext) -> None:
         self._context = context
@@ -117,56 +125,70 @@ class Drive(object):
         self._raii = None
 
     async def get_root_node(self) -> Node:
+        '''Get the root node.'''
         return await self._db.get_root_node()
 
     async def get_node_by_id(self, node_id: str) -> Node:
+        '''Get node by node id.'''
         return await self._db.get_node_by_id(node_id)
 
     async def get_node_by_path(self, path: PathOrString) -> Optional[Node]:
+        '''Get node by absolute path.'''
         path = pathlib.PurePath(path)
         path = normalize_path(path)
         return await self._db.get_node_by_path(path)
 
     async def get_path(self, node: Node) -> Optional[pathlib.PurePath]:
+        '''Get absolute path of the node.'''
         return await self._db.get_path_by_id(node.id_)
 
     async def get_path_by_id(self, node_id: str) -> str:
+        '''Get absolute path of the node id.'''
         return await self._db.get_path_by_id(node_id)
 
     async def get_node_by_name_from_parent_id(self,
         name: str,
         parent_id: str,
     ) -> Node:
+        '''Get node by given name and parent id.'''
         return await self._db.get_node_by_name_from_parent_id(name, parent_id)
 
     async def get_node_by_name_from_parent(self,
         name: str,
         parent: Node,
     ) -> Node:
+        '''Get node by given name and parent node.'''
         return await self._db.get_node_by_name_from_parent_id(name, parent.id_)
 
     async def get_children(self, node: Node) -> List[Node]:
+        '''Get the child node list of given node.'''
         return await self._db.get_children_by_id(node.id_)
 
     async def get_children_by_id(self, node_id: str) -> List[Node]:
+        '''Get the child node list of given node id.'''
         return await self._db.get_children_by_id(node_id)
 
     async def get_trashed_nodes(self) -> List[Node]:
+        '''Get trashed node list.'''
         return await self._db.get_trashed_nodes()
 
     async def find_nodes_by_regex(self, pattern: str) -> List[Node]:
+        '''Find nodes by name.'''
         return await self._db.find_nodes_by_regex(pattern)
 
     async def find_orphan_nodes(self) -> List[Node]:
+        '''Find nodes which are dangling from root.'''
         return await self._db.find_orphan_nodes()
 
     async def find_multiple_parents_nodes(self) -> List[Node]:
+        '''Find nodes which have two or more parents.'''
         return await self._db.find_multiple_parents_nodes()
 
     async def walk(self,
         node: Node,
         include_trashed: bool = False,
     ) -> AsyncGenerator[Tuple[Node, List[Node], List[Node]], None]:
+        '''Traverse nodes from given node.'''
         if not node.is_folder:
             return
         q = [node]
@@ -195,6 +217,7 @@ class Drive(object):
         folder_name: str,
         exist_ok: bool = False,
     ) -> Node:
+        '''Create a folder.'''
         # sanity check
         if not parent_node:
             raise TypeError('invalid parent node')
@@ -219,10 +242,12 @@ class Drive(object):
         )
 
     async def download_by_id(self, node_id: str) -> ReadableFile:
+        '''Download the node.'''
         node = await self.get_node_by_id(node_id)
         return await self.download(node)
 
     async def download(self, node: Node) -> ReadableFile:
+        '''Download the node.'''
         # sanity check
         if not node:
             raise TypeError('node is none')
@@ -239,6 +264,7 @@ class Drive(object):
         mime_type: str = None,
         media_info: MediaInfo = None,
     ) -> WritableFile:
+        '''Upload file.'''
         parent_node = await self.get_node_by_id(parent_id)
         return await self.upload(
             parent_node,
@@ -256,6 +282,7 @@ class Drive(object):
         mime_type: str = None,
         media_info: MediaInfo = None,
     ) -> WritableFile:
+        '''Upload file.'''
         # sanity check
         if not parent_node:
             raise TypeError('invalid parent node')
@@ -278,10 +305,12 @@ class Drive(object):
         )
 
     async def trash_node_by_id(self, node_id: str) -> None:
+        '''Move the node to trash.'''
         node = await self.get_node_by_id(node_id)
         await self.trash_node(node)
 
     async def trash_node(self, node: Node) -> None:
+        '''Move the node to trash.'''
         # sanity check
         if not node:
             raise TypeError('source node is none')
@@ -295,6 +324,7 @@ class Drive(object):
         new_parent: Node = None,
         new_name: str = None,
     ) -> Node:
+        '''Move or rename the node.'''
         # sanity check
         if not node:
             raise TypeError('source node is none')
@@ -331,6 +361,7 @@ class Drive(object):
         new_parent_id: str = None,
         new_name: str = None,
     ) -> Node:
+        '''Move or rename the node.'''
         node = await self.get_node_by_id(node_id)
         new_parent = await self.get_node_by_id(new_parent_id)
         return await self.rename_node(node, new_parent, new_name)
@@ -396,6 +427,10 @@ class Drive(object):
     async def sync(self,
         check_point: str = None,
     ) -> AsyncGenerator[ChangeDict, None]:
+        '''Synchronize the local node cache.
+
+        This is the ONLY function which will modify the local cache.
+        '''
         async with self._sync_lock:
             dry_run = check_point is not None
             initial_check_point = await self._remote.get_initial_check_point()
@@ -419,6 +454,7 @@ class Drive(object):
                     yield change
 
     async def get_hasher(self) -> Hasher:
+        '''Get a Hasher instance for checksum calculation.'''
         return await self._remote.get_hasher()
 
 
@@ -433,6 +469,7 @@ class DriveFactory(object):
 
     @property
     def config_path(self) -> pathlib.Path:
+        '''The path which contains config files.'''
         return self._config_path
 
     @config_path.setter
@@ -441,6 +478,7 @@ class DriveFactory(object):
 
     @property
     def data_path(self) -> pathlib.Path:
+        '''The path which contains data files.'''
         return self._data_path
 
     @data_path.setter
@@ -448,6 +486,7 @@ class DriveFactory(object):
         self._data_path = pathlib.Path(path)
 
     def load_config(self) -> None:
+        '''The path which contains data files.'''
         # ensure we can access the folder
         self.config_path.mkdir(parents=True, exist_ok=True)
 
