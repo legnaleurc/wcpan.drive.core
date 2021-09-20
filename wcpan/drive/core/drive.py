@@ -1,7 +1,7 @@
 __all__ = ('Drive', 'DriveFactory')
 
 
-from typing import List, AsyncGenerator, Tuple, Optional, Type
+from typing import List, AsyncGenerator, Tuple, Optional, Type, Union
 import asyncio
 import concurrent.futures
 import contextlib
@@ -93,10 +93,10 @@ class Drive(object):
         self._context = context
         self._sync_lock = asyncio.Lock()
 
-        self._remote = None
+        self._remote: Union[RemoteDriver, None] = None
 
         self._pool = None
-        self._db = None
+        self._db: Union[Cache, None] = None
 
         self._raii = None
 
@@ -219,6 +219,8 @@ class Drive(object):
     ) -> Node:
         '''Create a folder.'''
         # sanity check
+        if not self._remote:
+            raise InvalidRemoteDriverError()
         if not parent_node:
             raise TypeError('invalid parent node')
         if not parent_node.is_folder:
@@ -249,6 +251,8 @@ class Drive(object):
     async def download(self, node: Node) -> ReadableFile:
         '''Download the node.'''
         # sanity check
+        if not self._remote:
+            raise InvalidRemoteDriverError()
         if not node:
             raise TypeError('node is none')
         if node.is_folder:
@@ -284,6 +288,8 @@ class Drive(object):
     ) -> WritableFile:
         '''Upload file.'''
         # sanity check
+        if not self._remote:
+            raise InvalidRemoteDriverError()
         if not parent_node:
             raise TypeError('invalid parent node')
         if not parent_node.is_folder:
@@ -312,6 +318,8 @@ class Drive(object):
     async def trash_node(self, node: Node) -> None:
         '''Move the node to trash.'''
         # sanity check
+        if not self._remote:
+            raise InvalidRemoteDriverError()
         if not node:
             raise TypeError('source node is none')
         root_node = await self.get_root_node()
@@ -326,6 +334,8 @@ class Drive(object):
     ) -> Node:
         '''Move or rename the node.'''
         # sanity check
+        if not self._remote:
+            raise InvalidRemoteDriverError()
         if not node:
             raise TypeError('source node is none')
         if node.trashed:
@@ -431,6 +441,8 @@ class Drive(object):
 
         This is the ONLY function which will modify the local cache.
         '''
+        if not self._remote:
+            raise InvalidRemoteDriverError()
         async with self._sync_lock:
             dry_run = check_point is not None
             initial_check_point = await self._remote.get_initial_check_point()
@@ -455,6 +467,8 @@ class Drive(object):
 
     async def get_hasher(self) -> Hasher:
         '''Get a Hasher instance for checksum calculation.'''
+        if not self._remote:
+            raise InvalidRemoteDriverError()
         return await self._remote.get_hasher()
 
 
