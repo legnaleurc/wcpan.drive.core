@@ -526,7 +526,7 @@ def inner_insert_node(query: sqlite3.Cursor, node: Node) -> None:
         VALUES
         (?, ?, ?, ?, ?)
     ;''', (node.id_, node.name, node.trashed,
-           node.created.timestamp, node.modified.timestamp))
+           node.created.int_timestamp, node.modified.int_timestamp))
 
     # add file information
     if not node.is_folder:
