@@ -270,3 +270,10 @@ def get_mime_type(path: PathOrString):
     if not type_:
         return 'application/octet-stream'
     return type_
+
+
+def is_valid_name(name: str) -> bool:
+    if name.find('\\') >= 0:
+        return False
+    path = pathlib.Path(name)
+    return path.name == name

@@ -35,6 +35,7 @@ from .util import (
     get_default_config_path,
     get_default_data_path,
     import_class,
+    is_valid_name,
     normalize_path,
     resolve_path,
 )
@@ -227,6 +228,8 @@ class Drive(object):
             raise ParentIsNotFolderError('invalid parent node')
         if not folder_name:
             raise TypeError('invalid folder name')
+        if not is_valid_name(folder_name):
+            raise TypeError('invalid folder name: no `/` or `\\` allowed')
 
         if not exist_ok:
             node = await self.get_node_by_name_from_parent(
@@ -296,6 +299,8 @@ class Drive(object):
             raise ParentIsNotFolderError('invalid parent node')
         if not file_name:
             raise TypeError('invalid file name')
+        if not is_valid_name(file_name):
+            raise TypeError('invalid file name: no `/` or `\\` allowed')
 
         node = await self.get_node_by_name_from_parent(file_name, parent_node)
         if node:
@@ -346,6 +351,9 @@ class Drive(object):
 
         if not new_parent and not new_name:
             raise TypeError('need new_parent or new_name')
+
+        if new_name and not is_valid_name(new_name):
+            raise TypeError('invalid new name: no `/` or `\\` allowed')
 
         if new_parent:
             if new_parent.trashed:
