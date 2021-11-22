@@ -156,6 +156,9 @@ class Cache(object):
     async def find_nodes_by_regex(self, pattern: str) -> List[Node]:
         return await self._bg(find_nodes_by_regex, pattern)
 
+    async def get_uploaded_size(self, begin: int, end: int) -> int:
+        return await self._bg(get_uploaded_size, begin, end)
+
     async def find_orphan_nodes(self) -> List[Node]:
         return await self._bg(find_orphan_nodes)
 
@@ -403,6 +406,23 @@ def find_nodes_by_regex(dsn: str, pattern: str) -> List[Node]:
         rv = query.fetchall()
         rv = [inner_get_node_by_id(query, _['id']) for _ in rv]
     return rv
+
+
+def get_uploaded_size(dsn: str, begin: int, end: int) -> int:
+    with Database(dsn) as db, \
+         ReadOnly(db) as query:
+        query.execute('''
+            SELECT SUM(size) AS sum
+            FROM files
+                INNER JOIN nodes ON files.id = nodes.id
+            where created >= ? AND created < ?
+        ;''', (begin, end))
+        rv = query.fetchone()
+        if not rv:
+            return 0
+        if rv['sum'] is None:
+            return 0
+        return rv['sum']
 
 
 def find_orphan_nodes(dsn: str) -> List[Node]:

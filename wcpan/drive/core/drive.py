@@ -173,6 +173,14 @@ class Drive(object):
         '''Get trashed node list.'''
         return await self._db.get_trashed_nodes()
 
+    async def get_uploaded_size(self, begin: int, end: int) -> int:
+        '''
+        Get uploaded file size in a time range
+
+        `begin` and `end` are UTC timestamps in second.
+        '''
+        return await self._db.get_uploaded_size(begin, end)
+
     async def find_nodes_by_regex(self, pattern: str) -> List[Node]:
         '''Find nodes by name.'''
         return await self._db.find_nodes_by_regex(pattern)
