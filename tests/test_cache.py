@@ -1,11 +1,8 @@
-import asyncio
-import contextlib as cl
-import functools as ft
+import contextlib
 import os
 import sqlite3
 import tempfile
-import unittest as ut
-import unittest.mock as utm
+import unittest
 
 from wcpan.drive.core.types import Node
 from wcpan.drive.core.cache import (
@@ -16,10 +13,10 @@ from wcpan.drive.core.cache import (
 )
 from wcpan.drive.core.util import create_executor
 
-from .util import create_root, create_folder, create_file
+from .util import create_root, create_folder, create_file, get_utc_now
 
 
-class TestTransaction(ut.TestCase):
+class TestTransaction(unittest.TestCase):
 
     def setUp(self):
         _, self._file = tempfile.mkstemp()
@@ -43,7 +40,7 @@ class TestTransaction(ut.TestCase):
             with ReadWrite(db) as query:
                 inner_insert(query)
 
-            with cl.closing(db.cursor()) as query:
+            with contextlib.closing(db.cursor()) as query:
                 query.execute('''
                     SELECT id FROM student WHERE name=?;
                 ''', ('bob',))
@@ -96,12 +93,12 @@ class TestTransaction(ut.TestCase):
         self.assertEqual(str(e.exception), 'database is locked')
 
 
-class TestNodeCache(ut.IsolatedAsyncioTestCase):
+class TestNodeCache(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         _, self._file = tempfile.mkstemp()
 
-        async with cl.AsyncExitStack() as ctx:
+        async with contextlib.AsyncExitStack() as ctx:
             pool = ctx.enter_context(create_executor())
             self._db = await ctx.enter_async_context(Cache(self._file, pool))
             self._stack = ctx.pop_all()
@@ -136,6 +133,14 @@ class TestNodeCache(ut.IsolatedAsyncioTestCase):
         with self.assertRaises(CacheError):
             await self._db.get_path_by_id('__INVALID_ID__')
 
+    async def testGetUploadedSize(self):
+        now = get_utc_now()
+        timestamp = int(now.timestamp())
+        rv = await self._db.get_uploaded_size(timestamp - 10, timestamp + 10)
+        self.assertEqual(6892, rv)
+        rv = await self._db.get_uploaded_size(timestamp - 20, timestamp - 10)
+        self.assertEqual(0, rv)
+
 
 def connect(path):
     db = sqlite3.connect(path, timeout=0.1)
@@ -144,7 +149,7 @@ def connect(path):
 
 
 def prepare(db):
-    with cl.closing(db.cursor()) as query:
+    with contextlib.closing(db.cursor()) as query:
         query.execute('''
             CREATE TABLE student (
                 id INTEGER NOT NULL,
