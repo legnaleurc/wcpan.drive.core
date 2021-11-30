@@ -1,8 +1,7 @@
 import contextlib
-import tempfile
 import unittest
 
-from wcpan.drive.core.drive import DriveFactory
+from wcpan.drive.core.drive import Drive
 from wcpan.drive.core.exceptions import (
     LineageError,
     NodeConflictedError,
@@ -10,42 +9,23 @@ from wcpan.drive.core.exceptions import (
     ParentIsNotFolderError,
     RootNodeError,
     TrashedNodeError,
-    UploadError,
     DownloadError,
 )
-
-from .util import (
-    ChangeListBuilder,
-    create_file,
-    create_folder,
-    create_image,
-    create_video,
-    toggle_trashed,
-)
+from wcpan.drive.core.test import test_factory, TestDriver
 
 
 class TestDrive(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         async with contextlib.AsyncExitStack() as stack:
-            config_path = stack.enter_context(
-                tempfile.TemporaryDirectory()
+            factory = stack.enter_context(
+                test_factory(middleware_list=[
+                    'tests.driver.FakeMiddleware',
+                    'tests.driver.FakeMiddleware',
+                ])
             )
-            data_path = stack.enter_context(
-                tempfile.TemporaryDirectory()
-            )
-
-            factory = DriveFactory()
-            factory.config_path = config_path
-            factory.data_path = data_path
-            factory.database = 'nodes.db'
-            factory.driver = 'tests.driver.FakeDriver'
-            factory.middleware_list = [
-                'tests.driver.FakeMiddleware',
-                'tests.driver.FakeMiddleware',
-            ]
-            self._drive = await stack.enter_async_context(factory())
-            self._driver = self._drive._remote._driver._driver
+            self._drive: Drive = await stack.enter_async_context(factory())
+            self._driver: TestDriver = self._drive._remote._driver._driver
 
             self._raii = stack.pop_all()
 
@@ -60,27 +40,26 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         root_node = await driver.fetch_root_node()
 
         # normal file and folder
-        builder = ChangeListBuilder()
-        builder.update(create_folder('id_1', 'name_1', root_node.id_))
-        builder.update(create_file(
-            'id_2',
-            'name_2',
-            'id_1',
-            2,
-            'hash_2',
-            'text/plain',
-        ))
-        driver.set_changes('2', builder.changes)
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_1', root_node)
+        node_1 = builder.commit()
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_2', node_1)
+        builder.to_file(2, 'hash_2', 'text/plain')
+        node_2 = builder.commit()
 
+        pseudo_changes = driver.pseudo.changes
         applied_changes = [change async for change in self._drive.sync()]
-        self.assertEqual(applied_changes, builder.changes)
+        self.assertEqual(applied_changes, pseudo_changes)
 
         node = await self._drive.get_node_by_path('/name_1')
+        self.assertIsNotNone(node)
         self.assertTrue(node.is_folder)
-        self.assertEqual(node.id_, 'id_1')
+        self.assertEqual(node.id_, node_1.id_)
         node = await self._drive.get_node_by_path('/name_1/name_2')
+        self.assertIsNotNone(node)
         self.assertTrue(node.is_file)
-        self.assertEqual(node.id_, 'id_2')
+        self.assertEqual(node.id_, node_2.id_)
         self.assertEqual(node.size, 2)
         self.assertEqual(node.hash_, 'hash_2')
         self.assertEqual(node.mime_type, 'text/plain')
@@ -106,32 +85,20 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         # self.assertIsNone(node)
 
         # image and video
-        builder.reset()
-        builder.update(create_image(
-            'id_4',
-            'name_4',
-            'id_1',
-            4,
-            'hash_4',
-            'image/png',
-            640,
-            480,
-        ))
-        builder.update(create_video(
-            'id_5',
-            'name_5',
-            'id_1',
-            5,
-            'hash_5',
-            'video/mpeg',
-            640,
-            480,
-            5,
-        ))
-        driver.set_changes('4', builder.changes)
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_4', node_1)
+        builder.to_file(4, 'hash_4', 'image/png')
+        builder.to_image(640, 480)
+        node_4 = builder.commit()
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_5', node_1)
+        builder.to_file(5, 'hash_5', 'video/mpeg')
+        builder.to_video(640, 480, 5)
+        node_5 = builder.commit()
 
+        pseudo_changes = driver.pseudo.changes
         applied_changes = [change async for change in self._drive.sync()]
-        self.assertEqual(applied_changes, builder.changes)
+        self.assertEqual(applied_changes, pseudo_changes)
 
         node = await self._drive.get_node_by_path('/name_1/name_4')
         self.assertTrue(node.is_image)
@@ -144,47 +111,39 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(node.video_ms_duration, 5)
 
         # delete file
-        builder.reset()
-        builder.delete('id_2')
-        driver.set_changes('5', builder.changes)
+        driver.pseudo.delete(node_2.id_)
 
+        pseudo_changes = driver.pseudo.changes
         applied_changes = [change async for change in self._drive.sync()]
-        self.assertEqual(applied_changes, builder.changes)
+        self.assertEqual(applied_changes, pseudo_changes)
 
         node = await self._drive.get_node_by_path('/name_1/name_2')
         self.assertIsNone(node)
 
         # delete folder
-        builder.reset()
-        builder.delete('id_1')
-        driver.set_changes('5', builder.changes)
+        driver.pseudo.delete(node_1.id_)
 
+        pseudo_changes = driver.pseudo.changes
         applied_changes = [change async for change in self._drive.sync()]
-        self.assertEqual(applied_changes, builder.changes)
+        self.assertEqual(applied_changes, pseudo_changes)
 
         node = await self._drive.get_node_by_path('/name_1')
         self.assertIsNone(node)
-        node = await self._drive.get_node_by_id('id_4')
+        node = await self._drive.get_node_by_id(node_4.id_)
         self.assertIsNone(node.parent_id)
-        node = await self._drive.get_node_by_id('id_5')
+        node = await self._drive.get_node_by_id(node_5.id_)
         self.assertIsNone(node.parent_id)
 
     async def testCreateFolder(self):
         driver = self._driver
-        mock = driver.create_folder_mock
+        mock = driver.mock.create_folder
         api = self._drive.create_folder
         root_node = await driver.fetch_root_node()
 
-        builder = ChangeListBuilder()
-        builder.update(create_file(
-            'id_1',
-            'name_1',
-            root_node.id_,
-            1,
-            'hash_1',
-            'text/plain',
-        ))
-        driver.set_changes('2', builder.changes)
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_1', root_node)
+        builder.to_file(1, 'hash_1', 'text/plain')
+        builder.commit()
 
         async for dummy_change in self._drive.sync():
             pass
@@ -236,40 +195,33 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
     async def testRenameNode(self):
         driver = self._driver
-        mock = driver.rename_node_mock
+        mock = driver.mock.rename_node
         api = self._drive.rename_node
         api_alt = self._drive.rename_node_by_path
         root_node = await driver.fetch_root_node()
 
-        builder = ChangeListBuilder()
-        builder.update(create_folder('id_1', 'name_1', root_node.id_))
-        builder.update(create_file(
-            'id_2',
-            'name_2',
-            'id_1',
-            2,
-            'hash_2',
-            'text/plain',
-        ))
-        builder.update(create_folder('id_3', 'name_3', 'id_1'))
-        builder.update(create_file(
-            'id_4',
-            'name_4',
-            'id_1',
-            4,
-            'hash_4',
-            'text/plain',
-        ))
-        builder.update(
-            toggle_trashed(
-                create_folder(
-                    'id_5',
-                    'name_5',
-                    'id_1',
-                ),
-            ),
-        )
-        driver.set_changes('2', builder.changes)
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_1', root_node)
+        node_1 = builder.commit()
+
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_2', node_1)
+        builder.to_file(2, 'hash_2', 'text/plain')
+        builder.commit()
+
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_3', node_1)
+        builder.commit()
+
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_4', node_1)
+        builder.to_file(4, 'hash_4', 'text/plain')
+        builder.commit()
+
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_5', node_1)
+        builder.to_trashed()
+        node_5 = builder.commit()
 
         async for dummy_change in self._drive.sync():
             pass
@@ -289,7 +241,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # do not touch trash can
         node1 = await self._drive.get_node_by_path('/name_1')
-        node2 = await self._drive.get_node_by_id('id_5')
+        node2 = await self._drive.get_node_by_id(node_5.id_)
         with self.assertRaises(TrashedNodeError):
             await api(node1, node2, None)
         with self.assertRaises(TrashedNodeError):
@@ -364,13 +316,13 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
     async def testTrashNode(self):
         driver = self._driver
-        mock = driver.trash_node_mock
+        mock = driver.mock.trash_node
         api = self._drive.trash_node
         root_node = await driver.fetch_root_node()
 
-        builder = ChangeListBuilder()
-        builder.update(create_folder('id_1', 'name_1', root_node.id_))
-        driver.set_changes('2', builder.changes)
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_1', root_node)
+        builder.commit()
 
         async for dummy_change in self._drive.sync():
             pass
@@ -395,21 +347,18 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
     async def testDownload(self):
         driver = self._driver
-        mock = driver.download_mock
+        mock = driver.mock.download
         api = self._drive.download
         root_node = await driver.fetch_root_node()
 
-        builder = ChangeListBuilder()
-        builder.update(create_folder('id_1', 'name_1', root_node.id_))
-        builder.update(create_file(
-            'id_2',
-            'name_2',
-            'id_1',
-            2,
-            'hash_2',
-            'text/plain',
-        ))
-        driver.set_changes('2', builder.changes)
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_1', root_node)
+        node_1 = builder.commit()
+
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_2', node_1)
+        builder.to_file(2, 'hash_2', 'text/plain')
+        builder.commit()
 
         async for dummy_change in self._drive.sync():
             pass
@@ -435,21 +384,18 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
     async def testUpload(self):
         driver = self._driver
-        mock = driver.upload_mock
+        mock = driver.mock.upload
         api = self._drive.upload
         root_node = await driver.fetch_root_node()
 
-        builder = ChangeListBuilder()
-        builder.update(create_folder('id_1', 'name_1', root_node.id_))
-        builder.update(create_file(
-            'id_2',
-            'name_2',
-            'id_1',
-            2,
-            'hash_2',
-            'text/plain',
-        ))
-        driver.set_changes('2', builder.changes)
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_1', root_node)
+        node_1 = builder.commit()
+
+        builder = driver.pseudo.build_node()
+        builder.to_folder('name_2', node_1)
+        builder.to_file(2, 'hash_2', 'text/plain')
+        builder.commit()
 
         async for dummy_change in self._drive.sync():
             pass
@@ -498,7 +444,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
     async def testGetHasher(self):
         driver = self._driver
-        mock = driver.get_hasher_mock
+        mock = driver.mock.get_hasher
 
         await self._drive.get_hasher()
         mock.assert_called_once_with()

@@ -4,16 +4,14 @@ import sqlite3
 import tempfile
 import unittest
 
-from wcpan.drive.core.types import Node
 from wcpan.drive.core.cache import (
     ReadOnly,
     ReadWrite,
     Cache,
     CacheError,
 )
-from wcpan.drive.core.util import create_executor
-
-from .util import create_root, create_folder, create_file, get_utc_now
+from wcpan.drive.core.test import PseudoManager
+from wcpan.drive.core.util import create_executor, get_utc_now
 
 
 class TestTransaction(unittest.TestCase):
@@ -111,13 +109,13 @@ class TestNodeCache(unittest.IsolatedAsyncioTestCase):
 
     async def testRoot(self):
         node = await self._db.get_root_node()
-        self.assertEqual(node.id_, '__ROOT_ID__')
+        self.assertEqual(node.id_, '__ID_ROOT__')
 
     async def testSearch(self):
         nodes = await self._db.find_nodes_by_regex(r'^f1$')
         self.assertEqual(len(nodes), 1)
         node = nodes[0]
-        self.assertEqual(node.id_, '__F1_ID__')
+        self.assertEqual(node.id_, '__ID_2__')
         path = await self._db.get_path_by_id(node.id_)
         self.assertEqual(str(path), '/d1/f1')
 
@@ -125,7 +123,7 @@ class TestNodeCache(unittest.IsolatedAsyncioTestCase):
         nodes = await self._db.get_trashed_nodes()
         self.assertEqual(len(nodes), 1)
         node = nodes[0]
-        self.assertEqual(node.id_, '__F3_ID__')
+        self.assertEqual(node.id_, '__ID_4__')
         path = await self._db.get_path_by_id(node.id_)
         self.assertEqual(str(path), '/d1/f3')
 
@@ -181,53 +179,33 @@ def inner_insert(query):
 
 
 async def initialize_nodes(db):
-    data = create_root()
-    node = Node.from_dict(data)
-    await db.insert_node(node)
+    pseudo = PseudoManager()
 
-    data = [
-        {
-            'removed': False,
-            'node': create_folder('__D1_ID__', 'd1', '__ROOT_ID__'),
-        },
-        {
-            'removed': False,
-            'node': create_folder('__D2_ID__', 'd2', '__ROOT_ID__'),
-        },
-        {
-            'removed': False,
-            'node': create_file(
-                '__F1_ID__',
-                'f1',
-                '__D1_ID__',
-                1337,
-                '__F1_MD5__',
-                'text/plain',
-            ),
-        },
-        {
-            'removed': False,
-            'node': create_file(
-                '__F2_ID__',
-                'f2',
-                '__D2_ID__',
-                1234,
-                '__F2_MD5__',
-                'text/plain',
-            ),
-        },
-    ]
-    trashed_node = create_file(
-        '__F3_ID__',
-        'f3',
-        '__D1_ID__',
-        4321,
-        '__F3_MD5__',
-        'text/plain',
-    )
-    trashed_node['trashed'] = True
-    data.append({
-        'removed': False,
-        'node': trashed_node,
-    })
-    await db.apply_changes(data, '2')
+    root_node = pseudo.build_node().node
+    await db.insert_node(root_node)
+
+    builder = pseudo.build_node()
+    builder.to_folder('d1', root_node)
+    d1 = builder.commit()
+
+    builder = pseudo.build_node()
+    builder.to_folder('d2', root_node)
+    d2 = builder.commit()
+
+    builder = pseudo.build_node()
+    builder.to_folder('f1', d1)
+    builder.to_file(1337, '__F1_MD5__', 'text/plain')
+    builder.commit()
+
+    builder = pseudo.build_node()
+    builder.to_folder('f2', d2)
+    builder.to_file(1234, '__F2_MD5__', 'text/plain')
+    builder.commit()
+
+    builder = pseudo.build_node()
+    builder.to_folder('f3', d1)
+    builder.to_file(4321, '__F3_MD5__', 'text/plain')
+    builder.to_trashed()
+    builder.commit()
+
+    await db.apply_changes(pseudo.changes, '2')

@@ -1,5 +1,6 @@
 from typing import List, TypedDict, BinaryIO, Optional, Type
 import concurrent.futures
+import datetime
 import importlib
 import mimetypes
 import multiprocessing
@@ -277,3 +278,7 @@ def is_valid_name(name: str) -> bool:
         return False
     path = pathlib.Path(name)
     return path.name == name
+
+
+def get_utc_now():
+    return datetime.datetime.now(datetime.timezone.utc)
