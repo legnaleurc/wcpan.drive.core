@@ -25,7 +25,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
                 ])
             )
             self._drive: Drive = await stack.enter_async_context(factory())
-            self._driver: TestDriver = self._drive._remote._driver._driver
+            self._driver: TestDriver = self._drive.remote.remote.remote
 
             self._raii = stack.pop_all()
 

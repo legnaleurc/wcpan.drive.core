@@ -20,7 +20,7 @@ class FakeMiddleware(Middleware):
 
     @classmethod
     def get_version_range(cls):
-        return (1, 1)
+        return (2, 2)
 
     def __init__(self, context: ReadOnlyContext, driver: RemoteDriver) -> None:
         self._context = context
@@ -31,6 +31,10 @@ class FakeMiddleware(Middleware):
 
     async def __aexit__(self, et, ev, tb) -> bool:
         pass
+
+    @property
+    def remote(self):
+        return self._driver
 
     async def get_initial_check_point(self) -> str:
         return await self._driver.get_initial_check_point()
@@ -47,8 +51,9 @@ class FakeMiddleware(Middleware):
     async def create_folder(self,
         parent_node: Node,
         folder_name: str,
-        private: Optional[PrivateDict],
+        *,
         exist_ok: bool,
+        private: Optional[PrivateDict],
     ) -> Node:
         return await self._driver.create_folder(
             parent_node=parent_node,
@@ -59,6 +64,7 @@ class FakeMiddleware(Middleware):
 
     async def rename_node(self,
         node: Node,
+        *,
         new_parent: Optional[Node],
         new_name: Optional[str],
     ) -> Node:
@@ -77,6 +83,7 @@ class FakeMiddleware(Middleware):
     async def upload(self,
         parent_node: Node,
         file_name: str,
+        *,
         file_size: Optional[int],
         mime_type: Optional[str],
         media_info: Optional[MediaInfo],

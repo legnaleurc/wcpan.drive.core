@@ -41,7 +41,7 @@ from .util import (
 )
 
 
-DRIVER_VERSION = 1
+DRIVER_VERSION = 2
 
 
 class PrivateContext(object):
@@ -124,6 +124,11 @@ class Drive(object):
         self._pool = None
         self._db = None
         self._raii = None
+
+    @property
+    def remote(self) -> RemoteDriver:
+        '''Get the remote driver'''
+        return self._remote
 
     async def get_root_node(self) -> Node:
         '''Get the root node.'''
