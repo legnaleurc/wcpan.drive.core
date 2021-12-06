@@ -1,21 +1,19 @@
-from typing import List, TypedDict, BinaryIO, Optional, Type
+__all__ = (
+    'ConfigurationDict', 'get_default_configuration', 'get_default_config_path',
+    'get_default_data_path', 'create_executor', 'resolve_path',
+    'normalize_path', 'get_mime_type', 'is_valid_name', 'get_utc_now',
+)
+
+from typing import List, TypedDict, Type
 import concurrent.futures
 import datetime
 import importlib
 import mimetypes
 import multiprocessing
-import os
 import pathlib
 import signal
 
-from wcpan.logger import EXCEPTION
-
-from .types import Node, PathOrString, MediaInfo
-from .exceptions import (
-    DownloadError,
-    NodeConflictedError,
-    UploadError,
-)
+from .types import PathOrString
 
 
 class ConfigurationDict(TypedDict):
@@ -26,14 +24,12 @@ class ConfigurationDict(TypedDict):
     middleware: List[str]
 
 
-CHUNK_SIZE = 64 * 1024
-
-
 def get_default_configuration() -> ConfigurationDict:
     return {
         'version': 1,
-        'driver': None,
-        'database': None,
+        'driver': '',
+        'database': '',
+        'middleware': [],
     }
 
 
@@ -91,174 +87,6 @@ def normalize_path(path: pathlib.PurePath) -> pathlib.PurePath:
     return pathlib.PurePath(*rv)
 
 
-async def download_to_local_by_id(
-    drive: 'Drive',
-    node_id: str,
-    path: PathOrString,
-) -> pathlib.Path:
-    node = await drive.get_node_by_id(node_id)
-    return await download_to_local(drive, node, path)
-
-
-async def download_to_local(
-    drive: 'Drive',
-    node: Node,
-    path: PathOrString,
-) -> pathlib.Path:
-    file_ = pathlib.Path(path)
-    if not file_.is_dir():
-        raise ValueError(f'{path} does not exist')
-
-    # check if exists
-    complete_path = file_.joinpath(node.name)
-    if complete_path.is_file():
-        return complete_path
-
-    # exists but not a file
-    if complete_path.exists():
-        raise DownloadError(f'{complete_path} exists but is not a file')
-
-    # if the file is empty, no need to download
-    if node.size <= 0:
-        open(complete_path, 'w').close()
-        return complete_path
-
-    # resume download
-    tmp_path = complete_path.parent.joinpath(f'{complete_path.name}.__tmp__')
-    if tmp_path.is_file():
-        offset = tmp_path.stat().st_size
-        if offset > node.size:
-            raise DownloadError(
-                f'local file size of `{complete_path}` is greater then remote'
-                f' ({offset} > {node.size})')
-    elif tmp_path.exists():
-        raise DownloadError(f'{complete_path} exists but is not a file')
-    else:
-        offset = 0
-
-    if offset < node.size:
-        async with await drive.download(node) as fin:
-            await fin.seek(offset)
-            with open(tmp_path, 'ab') as fout:
-                while True:
-                    try:
-                        async for chunk in fin:
-                            fout.write(chunk)
-                        break
-                    except Exception as e:
-                        EXCEPTION('wcpan.drive.core', e) << 'download'
-
-                    offset = fout.tell()
-                    await fin.seek(offset)
-
-    # rename it back if completed
-    os.rename(tmp_path, complete_path)
-
-    return complete_path
-
-
-async def upload_from_local_by_id(
-    drive: 'Drive',
-    parent_id: str,
-    file_path: PathOrString,
-    media_info: Optional[MediaInfo],
-    *,
-    exist_ok: bool = False,
-) -> Node:
-    node = await drive.get_node_by_id(parent_id)
-    return await upload_from_local(
-        drive,
-        node,
-        file_path,
-        media_info,
-        exist_ok=exist_ok,
-    )
-
-
-async def upload_from_local(
-    drive: 'Drive',
-    parent_node: Node,
-    file_path: PathOrString,
-    media_info: Optional[MediaInfo],
-    *,
-    exist_ok: bool = False,
-) -> Node:
-    # sanity check
-    file_ = pathlib.Path(file_path).resolve()
-    if not file_.is_file():
-        raise UploadError('invalid file path')
-
-    file_name = file_.name
-    total_file_size = file_.stat().st_size
-    mime_type = get_mime_type(file_path)
-
-    try:
-        fout = await drive.upload(
-            parent_node=parent_node,
-            file_name=file_name,
-            file_size=total_file_size,
-            mime_type=mime_type,
-            media_info=media_info,
-        )
-    except NodeConflictedError as e:
-        if not exist_ok:
-            raise
-        return e.node
-
-    async with fout:
-        with open(file_path, 'rb') as fin:
-            while True:
-                try:
-                    await upload_feed(fin, fout)
-                    break
-                except UploadError as e:
-                    raise
-                except Exception as e:
-                    EXCEPTION('wcpan.drive.core', e) << 'upload feed'
-
-                await upload_continue(fin, fout)
-
-    node = await fout.node()
-    return node
-
-
-async def upload_feed(fin: BinaryIO, fout: BinaryIO) -> None:
-    while True:
-        chunk = fin.read(CHUNK_SIZE)
-        if not chunk:
-            break
-        await fout.write(chunk)
-
-
-async def upload_continue(fin: BinaryIO, fout: BinaryIO) -> None:
-    offset = await fout.tell()
-    await fout.seek(offset)
-    fin.seek(offset, os.SEEK_SET)
-
-
-async def find_duplicate_nodes(
-    drive: 'Drive',
-    root_node: Node = None,
-) -> List[List[Node]]:
-    if not root_node:
-        root_node = await drive.get_root_node()
-
-    rv = []
-    async for dummy_root, folders, files in drive.walk(root_node):
-        nodes = folders + files
-        seen = {}
-        for node in nodes:
-            if node.name not in seen:
-                seen[node.name] = [node]
-            else:
-                seen[node.name].append(node)
-        for nodes in seen.values():
-            if len(nodes) > 1:
-                rv.append(nodes)
-
-    return rv
-
-
 def import_class(class_path: str) -> Type:
     module_path, class_name = class_path.rsplit('.', 1)
     module = importlib.import_module(module_path)
@@ -266,7 +94,7 @@ def import_class(class_path: str) -> Type:
     return class_
 
 
-def get_mime_type(path: PathOrString):
+def get_mime_type(path: PathOrString) -> str:
     type_, dummy_encoding = mimetypes.guess_type(path)
     if not type_:
         return 'application/octet-stream'
@@ -280,5 +108,5 @@ def is_valid_name(name: str) -> bool:
     return path.name == name
 
 
-def get_utc_now():
+def get_utc_now() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc)

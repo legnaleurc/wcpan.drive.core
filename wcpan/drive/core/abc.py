@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 
-__all__ = ('ReadableFile', 'Hasher', 'WritableFile', 'Middleware')
+__all__ = (
+    'ReadableFile', 'Hasher', 'WritableFile', 'Middleware', 'RemoteDriver',
+)
 
 
 from abc import ABCMeta, abstractmethod

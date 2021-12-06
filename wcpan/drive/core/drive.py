@@ -1,15 +1,21 @@
-__all__ = ('Drive', 'DriveFactory')
+__all__ = (
+    'Drive', 'DriveFactory', 'download_to_local_by_id', 'download_to_local',
+    'upload_from_local_by_id', 'upload_from_local', 'find_duplicate_nodes',
+)
 
 
-from typing import List, AsyncGenerator, Tuple, Optional, Type, Union
+from typing import List, AsyncGenerator, Tuple, Optional, Type, Union, BinaryIO
 import asyncio
 import concurrent.futures
 import contextlib
 import functools
+import os
 import pathlib
 
+from wcpan.logger import EXCEPTION
 import yaml
 
+from .abc import ReadableFile, WritableFile, Hasher, RemoteDriver, Middleware
 from .cache import Cache
 from .exceptions import (
     DownloadError,
@@ -21,6 +27,17 @@ from .exceptions import (
     ParentIsNotFolderError,
     RootNodeError,
     TrashedNodeError,
+    UploadError,
+)
+from .util import (
+    create_executor,
+    get_default_config_path,
+    get_default_data_path,
+    get_mime_type,
+    import_class,
+    is_valid_name,
+    normalize_path,
+    resolve_path,
 )
 from .types import (
     ChangeDict,
@@ -29,19 +46,10 @@ from .types import (
     PathOrString,
     ReadOnlyContext,
 )
-from .abc import ReadableFile, WritableFile, Hasher, RemoteDriver, Middleware
-from .util import (
-    create_executor,
-    get_default_config_path,
-    get_default_data_path,
-    import_class,
-    is_valid_name,
-    normalize_path,
-    resolve_path,
-)
 
 
 DRIVER_VERSION = 2
+_CHUNK_SIZE = 64 * 1024
 
 
 class PrivateContext(object):
@@ -571,3 +579,171 @@ class DriveFactory(object):
             pool=pool,
         )
         return Drive(context)
+
+
+async def download_to_local_by_id(
+    drive: Drive,
+    node_id: str,
+    path: PathOrString,
+) -> pathlib.Path:
+    node = await drive.get_node_by_id(node_id)
+    return await download_to_local(drive, node, path)
+
+
+async def download_to_local(
+    drive: Drive,
+    node: Node,
+    path: PathOrString,
+) -> pathlib.Path:
+    file_ = pathlib.Path(path)
+    if not file_.is_dir():
+        raise ValueError(f'{path} does not exist')
+
+    # check if exists
+    complete_path = file_.joinpath(node.name)
+    if complete_path.is_file():
+        return complete_path
+
+    # exists but not a file
+    if complete_path.exists():
+        raise DownloadError(f'{complete_path} exists but is not a file')
+
+    # if the file is empty, no need to download
+    if node.size <= 0:
+        open(complete_path, 'w').close()
+        return complete_path
+
+    # resume download
+    tmp_path = complete_path.parent.joinpath(f'{complete_path.name}.__tmp__')
+    if tmp_path.is_file():
+        offset = tmp_path.stat().st_size
+        if offset > node.size:
+            raise DownloadError(
+                f'local file size of `{complete_path}` is greater then remote'
+                f' ({offset} > {node.size})')
+    elif tmp_path.exists():
+        raise DownloadError(f'{complete_path} exists but is not a file')
+    else:
+        offset = 0
+
+    if offset < node.size:
+        async with await drive.download(node) as fin:
+            await fin.seek(offset)
+            with open(tmp_path, 'ab') as fout:
+                while True:
+                    try:
+                        async for chunk in fin:
+                            fout.write(chunk)
+                        break
+                    except Exception as e:
+                        EXCEPTION('wcpan.drive.core', e) << 'download'
+
+                    offset = fout.tell()
+                    await fin.seek(offset)
+
+    # rename it back if completed
+    tmp_path.rename(complete_path)
+
+    return complete_path
+
+
+async def upload_from_local_by_id(
+    drive: Drive,
+    parent_id: str,
+    file_path: PathOrString,
+    media_info: Optional[MediaInfo],
+    *,
+    exist_ok: bool = False,
+) -> Node:
+    node = await drive.get_node_by_id(parent_id)
+    return await upload_from_local(
+        drive,
+        node,
+        file_path,
+        media_info,
+        exist_ok=exist_ok,
+    )
+
+
+async def upload_from_local(
+    drive: Drive,
+    parent_node: Node,
+    file_path: PathOrString,
+    media_info: Optional[MediaInfo],
+    *,
+    exist_ok: bool = False,
+) -> Node:
+    # sanity check
+    file_ = pathlib.Path(file_path).resolve()
+    if not file_.is_file():
+        raise UploadError('invalid file path')
+
+    file_name = file_.name
+    total_file_size = file_.stat().st_size
+    mime_type = get_mime_type(file_path)
+
+    try:
+        fout = await drive.upload(
+            parent_node=parent_node,
+            file_name=file_name,
+            file_size=total_file_size,
+            mime_type=mime_type,
+            media_info=media_info,
+        )
+    except NodeConflictedError as e:
+        if not exist_ok:
+            raise
+        return e.node
+
+    async with fout:
+        with open(file_path, 'rb') as fin:
+            while True:
+                try:
+                    await _upload_feed(fin, fout)
+                    break
+                except UploadError as e:
+                    raise
+                except Exception as e:
+                    EXCEPTION('wcpan.drive.core', e) << 'upload feed'
+
+                await _upload_continue(fin, fout)
+
+    node = await fout.node()
+    return node
+
+
+async def _upload_feed(fin: BinaryIO, fout: BinaryIO) -> None:
+    while True:
+        chunk = fin.read(_CHUNK_SIZE)
+        if not chunk:
+            break
+        await fout.write(chunk)
+
+
+async def _upload_continue(fin: BinaryIO, fout: BinaryIO) -> None:
+    offset = await fout.tell()
+    await fout.seek(offset)
+    fin.seek(offset, os.SEEK_SET)
+
+
+async def find_duplicate_nodes(
+    drive: Drive,
+    root_node: Node = None,
+) -> List[List[Node]]:
+    if not root_node:
+        root_node = await drive.get_root_node()
+
+    rv = []
+    async for dummy_root, folders, files in drive.walk(root_node):
+        nodes = folders + files
+        seen = {}
+        for node in nodes:
+            if node.name not in seen:
+                seen[node.name] = [node]
+            else:
+                seen[node.name].append(node)
+        for nodes in seen.values():
+            if len(nodes) > 1:
+                rv.append(nodes)
+
+    return rv
