@@ -10,9 +10,7 @@ from abc import ABCMeta, abstractmethod
 from typing import (
     AsyncGenerator,
     AsyncIterator,
-    List,
     Optional,
-    Tuple,
     Type,
 )
 from types import TracebackType
@@ -166,7 +164,7 @@ class RemoteDriver(metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def get_version_range(cls) -> Tuple[int, int]:
+    def get_version_range(cls) -> tuple[int, int]:
         '''
         Get competible API version range for this driver.
 
@@ -207,7 +205,7 @@ class RemoteDriver(metaclass=ABCMeta):
     @abstractmethod
     async def fetch_changes(self,
         check_point: str,
-    ) -> AsyncGenerator[Tuple[str, List[ChangeDict]], None]:
+    ) -> AsyncGenerator[tuple[str, list[ChangeDict]], None]:
         '''
         Fetch changes starts from `check_point`.
 
@@ -304,6 +302,24 @@ class RemoteDriver(metaclass=ABCMeta):
     async def get_hasher(self) -> Hasher:
         '''
         Get a hash calculator.
+        '''
+
+    @abstractmethod
+    async def is_authorized(self) -> bool:
+        '''
+        Is OAuth 2.0 authorized.
+        '''
+
+    @abstractmethod
+    async def get_oauth_url(self) -> str:
+        '''
+        Get OAuth 2.0 URL.
+        '''
+
+    @abstractmethod
+    async def set_oauth_token(self, token: str) -> None:
+        '''
+        Set OAuth 2.0 token.
         '''
 
 

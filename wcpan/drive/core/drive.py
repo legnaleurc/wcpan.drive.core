@@ -4,7 +4,7 @@ __all__ = (
 )
 
 
-from typing import List, AsyncGenerator, Tuple, Optional, Type, Union, BinaryIO
+from typing import AsyncGenerator, Optional, Type, Union, BinaryIO
 import asyncio
 import concurrent.futures
 import contextlib
@@ -27,6 +27,7 @@ from .exceptions import (
     ParentIsNotFolderError,
     RootNodeError,
     TrashedNodeError,
+    UnauthorizedError,
     UploadError,
 )
 from .util import (
@@ -48,7 +49,7 @@ from .types import (
 )
 
 
-DRIVER_VERSION = 2
+DRIVER_VERSION = 3
 _CHUNK_SIZE = 64 * 1024
 
 
@@ -59,7 +60,7 @@ class PrivateContext(object):
         data_path: pathlib.Path,
         database_dsn: str,
         driver_class: Type[RemoteDriver],
-        middleware_class_list: List[Type[Middleware]],
+        middleware_class_list: list[Type[Middleware]],
         pool: Optional[concurrent.futures.Executor],
     ) -> None:
         self._context = ReadOnlyContext(
@@ -174,15 +175,15 @@ class Drive(object):
         '''Get node by given name and parent node.'''
         return await self._db.get_node_by_name_from_parent_id(name, parent.id_)
 
-    async def get_children(self, node: Node) -> List[Node]:
+    async def get_children(self, node: Node) -> list[Node]:
         '''Get the child node list of given node.'''
         return await self._db.get_children_by_id(node.id_)
 
-    async def get_children_by_id(self, node_id: str) -> List[Node]:
+    async def get_children_by_id(self, node_id: str) -> list[Node]:
         '''Get the child node list of given node id.'''
         return await self._db.get_children_by_id(node_id)
 
-    async def get_trashed_nodes(self) -> List[Node]:
+    async def get_trashed_nodes(self) -> list[Node]:
         '''Get trashed node list.'''
         return await self._db.get_trashed_nodes()
 
@@ -194,22 +195,22 @@ class Drive(object):
         '''
         return await self._db.get_uploaded_size(begin, end)
 
-    async def find_nodes_by_regex(self, pattern: str) -> List[Node]:
+    async def find_nodes_by_regex(self, pattern: str) -> list[Node]:
         '''Find nodes by name.'''
         return await self._db.find_nodes_by_regex(pattern)
 
-    async def find_orphan_nodes(self) -> List[Node]:
+    async def find_orphan_nodes(self) -> list[Node]:
         '''Find nodes which are dangling from root.'''
         return await self._db.find_orphan_nodes()
 
-    async def find_multiple_parents_nodes(self) -> List[Node]:
+    async def find_multiple_parents_nodes(self) -> list[Node]:
         '''Find nodes which have two or more parents.'''
         return await self._db.find_multiple_parents_nodes()
 
     async def walk(self,
         node: Node,
         include_trashed: bool = False,
-    ) -> AsyncGenerator[Tuple[Node, List[Node], List[Node]], None]:
+    ) -> AsyncGenerator[tuple[Node, list[Node], list[Node]], None]:
         '''Traverse nodes from given node.'''
         if not node.is_folder:
             return
@@ -251,6 +252,8 @@ class Drive(object):
             raise TypeError('invalid folder name')
         if not is_valid_name(folder_name):
             raise TypeError('invalid folder name: no `/` or `\\` allowed')
+        if not await self.is_authorized():
+            raise UnauthorizedError()
 
         if not exist_ok:
             node = await self.get_node_by_name_from_parent(
@@ -281,6 +284,8 @@ class Drive(object):
             raise TypeError('node is none')
         if node.is_folder:
             raise DownloadError('node should be a file')
+        if not await self.is_authorized():
+            raise UnauthorizedError()
 
         return await self._remote.download(node)
 
@@ -322,6 +327,8 @@ class Drive(object):
             raise TypeError('invalid file name')
         if not is_valid_name(file_name):
             raise TypeError('invalid file name: no `/` or `\\` allowed')
+        if not await self.is_authorized():
+            raise UnauthorizedError()
 
         node = await self.get_node_by_name_from_parent(file_name, parent_node)
         if node:
@@ -347,7 +354,10 @@ class Drive(object):
         if not self._remote:
             raise InvalidRemoteDriverError()
         if not node:
-            raise TypeError('source node is none')
+            raise TypeError('invalid node')
+        if not await self.is_authorized():
+            raise UnauthorizedError()
+
         root_node = await self.get_root_node()
         if root_node.id_ == node.id_:
             raise RootNodeError('cannot trash root node')
@@ -369,6 +379,8 @@ class Drive(object):
         root_node = await self.get_root_node()
         if node.id_ == root_node.id_:
             raise RootNodeError('source node is the root node')
+        if not await self.is_authorized():
+            raise UnauthorizedError()
 
         if not new_parent and not new_name:
             raise TypeError('need new_parent or new_name')
@@ -472,6 +484,9 @@ class Drive(object):
         '''
         if not self._remote:
             raise InvalidRemoteDriverError()
+        if not await self.is_authorized():
+            raise UnauthorizedError()
+
         async with self._sync_lock:
             dry_run = check_point is not None
             initial_check_point = await self._remote.get_initial_check_point()
@@ -499,6 +514,21 @@ class Drive(object):
         if not self._remote:
             raise InvalidRemoteDriverError()
         return await self._remote.get_hasher()
+
+    async def is_authorized(self) -> bool:
+        if not self._remote:
+            raise InvalidRemoteDriverError()
+        return await self._remote.is_authorized()
+
+    async def get_oauth_url(self) -> str:
+        if not self._remote:
+            raise InvalidRemoteDriverError()
+        return await self._remote.get_oauth_url()
+
+    async def set_oauth_token(self, token: str):
+        if not self._remote:
+            raise InvalidRemoteDriverError()
+        return await self._remote.set_oauth_token(token)
 
 
 class DriveFactory(object):
@@ -560,14 +590,14 @@ class DriveFactory(object):
         driver_class = import_class(self.driver)
         min_, max_ = driver_class.get_version_range()
         if not min_ <= DRIVER_VERSION <= max_:
-            raise InvalidRemoteDriverError()
+            raise InvalidRemoteDriverError(f'invalid version: required {DRIVER_VERSION}, got ({min_}, {max_})')
 
         middleware_class_list = []
         for middleware in self.middleware_list:
             middleware_class = import_class(middleware)
             min_, max_ = middleware_class.get_version_range()
             if not min_ <= DRIVER_VERSION <= max_:
-                raise InvalidMiddlewareError()
+                raise InvalidMiddlewareError(f'invalid version: required {DRIVER_VERSION}, got ({min_}, {max_})')
             middleware_class_list.append(middleware_class)
 
         context = PrivateContext(
@@ -729,7 +759,7 @@ async def _upload_continue(fin: BinaryIO, fout: BinaryIO) -> None:
 async def find_duplicate_nodes(
     drive: Drive,
     root_node: Node = None,
-) -> List[List[Node]]:
+) -> list[list[Node]]:
     if not root_node:
         root_node = await drive.get_root_node()
 

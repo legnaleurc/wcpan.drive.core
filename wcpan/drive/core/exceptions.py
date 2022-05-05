@@ -28,7 +28,6 @@ class InvalidNameError(DriveError):
 
 
 class NodeTreeError(DriveError):
-
     pass
 
 
@@ -76,6 +75,10 @@ class ParentIsNotFolderError(NodeTreeError):
 
 
 class LineageError(NodeTreeError):
+    pass
+
+
+class UnauthorizedError(DriveError):
     pass
 
 

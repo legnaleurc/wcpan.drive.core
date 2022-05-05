@@ -1,7 +1,9 @@
 import contextlib
+import hashlib
+import os
 import pathlib
 from tempfile import TemporaryDirectory
-from typing import List, Optional
+from typing import AsyncIterator, Optional
 from unittest.mock import AsyncMock
 
 from .abc import RemoteDriver, ReadableFile, WritableFile, Hasher
@@ -11,7 +13,7 @@ from .util import get_utc_now
 
 
 @contextlib.contextmanager
-def test_factory(driver_class: str = None, middleware_list: List[str] = None):
+def test_factory(driver_class: str = None, middleware_list: list[str] = None):
     with TemporaryDirectory() as work_folder:
         work_path = pathlib.Path(work_folder)
         config_path = work_path / 'config'
@@ -33,18 +35,26 @@ class TestDriver(RemoteDriver):
 
     @classmethod
     def get_version_range(cls):
-        return (2, 2)
+        return (3, 3)
 
     def __init__(self, context: ReadOnlyContext) -> None:
         self.mock = MockManager()
         self.pseudo = PseudoManager()
         self._context = context
+        self._root: pathlib.Path = None
+        self._raii = None
 
     async def __aenter__(self) -> RemoteDriver:
+        with contextlib.ExitStack() as stack:
+            root = stack.enter_context(TemporaryDirectory())
+            self._root = pathlib.Path(root)
+            self._raii = stack.pop_all()
         return self
 
     async def __aexit__(self, et, ev, tb) -> bool:
-        pass
+        self._root = None
+        self._raii.close()
+        self._raii = None
 
     @property
     def remote(self):
@@ -103,7 +113,8 @@ class TestDriver(RemoteDriver):
         self.pseudo.update(dict_)
 
     async def download(self, node: Node) -> ReadableFile:
-        return await self.mock.download(node)
+        await self.mock.download(node)
+        return NodeReader(self._root, node)
 
     async def upload(self,
         parent_node: Node,
@@ -114,7 +125,7 @@ class TestDriver(RemoteDriver):
         media_info: Optional[MediaInfo],
         private: Optional[PrivateDict],
     ) -> WritableFile:
-        rv = await self.mock.upload(
+        await self.mock.upload(
             parent_node,
             file_name,
             file_size,
@@ -122,10 +133,27 @@ class TestDriver(RemoteDriver):
             media_info,
             private,
         )
-        return rv
+        return NodeWriter(
+            root=self._root,
+            pseudo=self.pseudo,
+            parent_node=parent_node,
+            file_name=file_name,
+            mime_type=mime_type,
+            media_info=media_info,
+        )
 
     async def get_hasher(self) -> Hasher:
-        return await self.mock.get_hasher()
+        await self.mock.get_hasher()
+        return NodeHasher()
+
+    async def is_authorized(self) -> bool:
+        return True
+
+    async def get_oauth_url(self) -> str:
+        return ''
+
+    async def set_oauth_token(self, token: str) -> None:
+        pass
 
 
 class MockManager(object):
@@ -153,7 +181,7 @@ class PseudoManager(object):
 
     def __init__(self):
         self.check_point = 1
-        self.changes: List[ChangeDict] = []
+        self.changes: list[ChangeDict] = []
         self._id = 0
 
     def next_id(self) -> str:
@@ -241,3 +269,129 @@ class NodeBuilder(object):
     def commit(self):
         self.pseudo.update(self.dict)
         return self.node
+
+
+class NodeHasher(Hasher):
+
+    def __init__(self):
+        self._hasher = hashlib.new('md5')
+
+    def update(self, data: bytes) -> None:
+        self._hasher.update(data)
+
+    def digest(self) -> bytes:
+        return self._hasher.digest()
+
+    def hexdigest(self) -> str:
+        return self._hasher.hexdigest()
+
+    def copy(self) -> Hasher:
+        return NodeHasher()
+
+
+class NodeReader(ReadableFile):
+
+    def __init__(self, root: pathlib.Path, node: Node):
+        self._root = root
+        self._node = node
+        self._fin = None
+        self._raii = None
+
+    async def __aenter__(self) -> ReadableFile:
+        with contextlib.ExitStack() as stack:
+            path = self._root / self._node.id_
+            self._fin = stack.enter_context(path.open('rb'))
+            self._raii = stack.pop_all()
+        return self
+
+    async def __aexit__(self, type_, exc, tb) -> bool:
+        self._fin = None
+        self._raii.close()
+        self._raii = None
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        while True:
+            chunk = self._fin.read(8192)
+            if not chunk:
+                return
+            yield chunk
+
+    async def read(self, length: int) -> bytes:
+        return self._fin.read(length)
+
+    async def seek(self, offset: int) -> None:
+        self._fin.flush()
+        self._fin.seek(offset, os.SEEK_SET)
+
+    async def node(self) -> Node:
+        return self._node
+
+
+class NodeWriter(WritableFile):
+
+    def __init__(self,
+        root: pathlib.Path,
+        pseudo: PseudoManager,
+        parent_node: Node,
+        file_name: str,
+        mime_type: Optional[str],
+        media_info: Optional[MediaInfo],
+    ):
+        self._root = root
+        self._pseudo = pseudo
+        self._parent_node = parent_node
+        self._file_name = file_name
+        self._mime_type = mime_type
+        self._media_info = media_info
+        self._node = None
+        self._fout = None
+        self._raii = None
+
+    async def __aenter__(self) -> WritableFile:
+        self._node = None
+        with contextlib.ExitStack() as stack:
+            path = self._root / '_'
+            self._fout = stack.enter_context(path.open('wb'))
+            self._raii = stack.pop_all()
+        return self
+
+    async def __aexit__(self, type_, exc, tb) -> bool:
+        self._fout.flush()
+        self._fout = None
+        self._raii.close()
+        self._raii = None
+
+        path = self._root / '_'
+        stat = path.stat()
+        hasher = NodeHasher()
+        with path.open('rb') as fin:
+            while True:
+                chunk = fin.read(8092)
+                if not chunk:
+                    break
+                hasher.update(chunk)
+        hash_ = hasher.hexdigest()
+
+        builder = self._pseudo.build_node()
+        builder.to_folder(self._file_name, self._parent_node)
+        builder.to_file(stat.st_size, hash_, self._mime_type)
+        if self._media_info:
+            if self._media_info.is_image:
+                builder.to_image(self._media_info.width, self._media_info.height)
+            elif self._media_info.is_video:
+                builder.to_video(self._media_info.width, self._media_info.height, self._media_info.ms_duration)
+        path.rename(self._root / builder.node.id_)
+        self._node = builder.commit()
+
+    async def tell(self) -> int:
+        return self._fout.tell()
+
+    async def seek(self, offset: int) -> None:
+        self._fout.flush()
+        self._fout.seek(offset, os.SEEK_SET)
+
+    async def write(self, chunk: bytes) -> int:
+        return self._fout.write(chunk)
+
+    async def node(self) -> Optional[Node]:
+        return self._node

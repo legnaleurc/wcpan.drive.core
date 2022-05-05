@@ -1,4 +1,4 @@
-from typing import List, Tuple, AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional
 
 from wcpan.drive.core.abc import (
     Hasher,
@@ -20,7 +20,7 @@ class FakeMiddleware(Middleware):
 
     @classmethod
     def get_version_range(cls):
-        return (2, 2)
+        return (3, 3)
 
     def __init__(self, context: ReadOnlyContext, driver: RemoteDriver) -> None:
         self._context = context
@@ -44,7 +44,7 @@ class FakeMiddleware(Middleware):
 
     async def fetch_changes(self,
         check_point: str,
-    ) -> AsyncGenerator[Tuple[str, List[ChangeDict]], None]:
+    ) -> AsyncGenerator[tuple[str, list[ChangeDict]], None]:
         async for check_point, changes in self._driver.fetch_changes(check_point):
             yield check_point, changes
 
@@ -100,3 +100,12 @@ class FakeMiddleware(Middleware):
 
     async def get_hasher(self) -> Hasher:
         return await self._driver.get_hasher()
+
+    async def is_authorized(self) -> bool:
+        return True
+
+    async def get_oauth_url(self) -> str:
+        return ''
+
+    async def set_oauth_token(self, token: str) -> None:
+        pass
