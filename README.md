@@ -18,6 +18,16 @@ async def simple_demo():
     factory.load_config()
 
     async with factory() as drive:
+        # Check for authorization.
+        if not await drive.is_authorized():
+            # Start OAuth 2.0 process
+            url = await drive.get_oauth_url()
+            # ... The user visits the url ...
+            # Get tokens from the user.
+            token = ...
+            # Finish OAuth 2.0 process.
+            await drive.set_oauth_token(token)
+
         # It is important to keep cache in sync.
         async for change in drive.sync():
             print(change)
@@ -49,13 +59,13 @@ async def config_demo():
     factory = DriveFactory()
 
     # Read config files from here.
-    # The default is $HOME/.config/wcpan/drive.
+    # The default is $HOME/.config/wcpan.drive.
     # These files are what you want to keep and backup.
     factory.config_path = '/tmp/config'
 
-    # Put data file to here.
-    # The default is $HOME/.local/share/wcpan/drive.
-    # These files can be safely deleted.
+    # Put generated files here.
+    # The default is $HOME/.local/share/wcpan.drive.
+    # These files should be safely deleted.
     factory.data_path = '/tmp/data'
 
     # Setup cache database, will write to data folder.
