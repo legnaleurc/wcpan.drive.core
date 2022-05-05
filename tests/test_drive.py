@@ -3,6 +3,7 @@ import unittest
 
 from wcpan.drive.core.drive import Drive
 from wcpan.drive.core.exceptions import (
+    CacheError,
     LineageError,
     NodeConflictedError,
     NodeNotFoundError,
@@ -449,3 +450,22 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         await self._drive.get_hasher()
         mock.assert_called_once_with()
         mock.reset_mock()
+
+    async def testEmptyCache(self):
+        with self.assertRaises(CacheError):
+            await self._drive.get_root_node()
+
+        node = await self._drive.get_node_by_id('not_exist')
+        self.assertIsNone(node)
+
+        with self.assertRaises(CacheError):
+            await self._drive.get_node_by_path('/')
+
+        node = await self._drive.get_node_by_name_from_parent_id('not_exist', 'not_exist')
+        self.assertIsNone(node)
+
+        node_list = await self._drive.get_children_by_id('not_exist')
+        self.assertFalse(node_list)
+
+        node_list = await self._drive.get_trashed_nodes()
+        self.assertFalse(node_list)

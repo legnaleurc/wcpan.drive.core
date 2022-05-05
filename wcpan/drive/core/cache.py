@@ -1,4 +1,4 @@
-from typing import List, Optional, Pattern
+from typing import Optional, Pattern
 import asyncio
 import concurrent.futures
 import functools
@@ -111,7 +111,10 @@ class Cache(object):
         pass
 
     async def get_root_id(self) -> str:
-        return await self.get_metadata('root_id')
+        try:
+            return await self.get_metadata('root_id')
+        except KeyError:
+            raise CacheError('invalid cache')
 
     async def get_root_node(self) -> Node:
         root_id = await self.get_root_id()
@@ -127,7 +130,10 @@ class Cache(object):
         return await self._bg(get_node_by_id, node_id)
 
     async def get_node_by_path(self, path: pathlib.PurePath) -> Optional[Node]:
-        return await self._bg(get_node_by_path, path)
+        try:
+            return await self._bg(get_node_by_path, path)
+        except KeyError:
+            raise CacheError('invalid cache')
 
     async def get_path_by_id(self, node_id: str) -> Optional[pathlib.PurePath]:
         return await self._bg(get_path_by_id, node_id)
@@ -138,14 +144,14 @@ class Cache(object):
     ) -> Optional[Node]:
         return await self._bg(get_node_by_name_from_parent_id, name, parent_id)
 
-    async def get_children_by_id(self, node_id: str) -> List[Node]:
+    async def get_children_by_id(self, node_id: str) -> list[Node]:
         return await self._bg(get_children_by_id, node_id)
 
-    async def get_trashed_nodes(self) -> List[Node]:
+    async def get_trashed_nodes(self) -> list[Node]:
         return await self._bg(get_trashed_nodes)
 
     async def apply_changes(self,
-        changes: List[ChangeDict],
+        changes: list[ChangeDict],
         check_point: str,
     ) -> None:
         return await self._bg(apply_changes, changes, check_point)
@@ -153,16 +159,16 @@ class Cache(object):
     async def insert_node(self, node: Node) -> None:
         return await self._bg(insert_node, node)
 
-    async def find_nodes_by_regex(self, pattern: str) -> List[Node]:
+    async def find_nodes_by_regex(self, pattern: str) -> list[Node]:
         return await self._bg(find_nodes_by_regex, pattern)
 
     async def get_uploaded_size(self, begin: int, end: int) -> int:
         return await self._bg(get_uploaded_size, begin, end)
 
-    async def find_orphan_nodes(self) -> List[Node]:
+    async def find_orphan_nodes(self) -> list[Node]:
         return await self._bg(find_orphan_nodes)
 
-    async def find_multiple_parents_nodes(self) -> List[Node]:
+    async def find_multiple_parents_nodes(self) -> list[Node]:
         return await self._bg(find_multiple_parents_nodes)
 
     async def _bg(self, fn, *args):
@@ -341,7 +347,7 @@ def get_node_by_name_from_parent_id(
     return node
 
 
-def get_children_by_id(dsn: str, node_id: str) -> List[Node]:
+def get_children_by_id(dsn: str, node_id: str) -> list[Node]:
     with Database(dsn) as db, \
          ReadOnly(db) as query:
         query.execute('''
@@ -355,7 +361,7 @@ def get_children_by_id(dsn: str, node_id: str) -> List[Node]:
     return children
 
 
-def get_trashed_nodes(dsn: str) -> List[Node]:
+def get_trashed_nodes(dsn: str) -> list[Node]:
     with Database(dsn) as db, \
          ReadOnly(db) as query:
         query.execute('''
@@ -371,7 +377,7 @@ def get_trashed_nodes(dsn: str) -> List[Node]:
 
 def apply_changes(
     dsn: str,
-    changes: List[ChangeDict],
+    changes: list[ChangeDict],
     check_point: str,
 ) -> None:
     with Database(dsn) as db, \
@@ -397,7 +403,7 @@ def insert_node(dsn: str, node: Node) -> None:
             inner_set_metadata(query, 'root_id', node.id_)
 
 
-def find_nodes_by_regex(dsn: str, pattern: str) -> List[Node]:
+def find_nodes_by_regex(dsn: str, pattern: str) -> list[Node]:
     with Database(dsn) as db, \
          ReadOnly(db) as query:
         fn = functools.partial(sqlite3_regexp, re.compile(pattern, re.I))
@@ -425,7 +431,7 @@ def get_uploaded_size(dsn: str, begin: int, end: int) -> int:
         return rv['sum']
 
 
-def find_orphan_nodes(dsn: str) -> List[Node]:
+def find_orphan_nodes(dsn: str) -> list[Node]:
     with Database(dsn) as db, \
          ReadOnly(db) as query:
         query.execute('''
@@ -439,7 +445,7 @@ def find_orphan_nodes(dsn: str) -> List[Node]:
     return rv
 
 
-def find_multiple_parents_nodes(dsn: str) -> List[Node]:
+def find_multiple_parents_nodes(dsn: str) -> list[Node]:
     with Database(dsn) as db, \
          ReadOnly(db) as query:
         query.execute('''
