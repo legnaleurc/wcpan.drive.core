@@ -4,7 +4,7 @@ __all__ = (
     'normalize_path', 'get_mime_type', 'is_valid_name', 'get_utc_now',
 )
 
-from typing import List, TypedDict, Type
+from typing import TypedDict, Type
 import concurrent.futures
 import datetime
 import importlib
@@ -21,7 +21,7 @@ class ConfigurationDict(TypedDict):
     version: int
     driver: str
     database: str
-    middleware: List[str]
+    middleware: list[str]
 
 
 def get_default_configuration() -> ConfigurationDict:

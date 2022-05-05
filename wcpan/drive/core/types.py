@@ -7,7 +7,7 @@ __all__ = (
 )
 
 
-from typing import TypedDict, List, Optional, Literal, Union, Dict
+from typing import TypedDict, Optional, Literal, Union
 import os
 
 import arrow
@@ -29,7 +29,7 @@ class VideoDict(TypedDict):
     ms_duration: int
 
 
-PrivateDict = Dict[str, str]
+PrivateDict = dict[str, str]
 
 
 class NodeDict(TypedDict):
@@ -39,7 +39,7 @@ class NodeDict(TypedDict):
     trashed: bool
     created: str
     modified: str
-    parent_list: List[str]
+    parent_list: list[str]
     is_folder: bool
     mime_type: Optional[str]
     hash: Optional[str]
@@ -76,7 +76,7 @@ class Node(object):
         trashed: bool,
         created: arrow.Arrow,
         modified: arrow.Arrow,
-        parent_list: List[str],
+        parent_list: list[str],
         is_folder: bool,
         mime_type: Optional[str],
         hash_: Optional[str],
@@ -132,7 +132,7 @@ class Node(object):
         return self._modified
 
     @property
-    def parent_list(self) -> List[str]:
+    def parent_list(self) -> list[str]:
         return self._parent_list
 
     @property
@@ -197,7 +197,7 @@ class Node(object):
         trashed: bool = None,
         created: arrow.Arrow = None,
         modified: arrow.Arrow = None,
-        parent_list: List[str] = None,
+        parent_list: list[str] = None,
         is_folder: bool = None,
         mime_type: str = None,
         hash_: str = None,
