@@ -274,7 +274,13 @@ class NodeBuilder(object):
 class NodeHasher(Hasher):
 
     def __init__(self):
-        self._hasher = hashlib.new('md5')
+        self._hasher = hashlib.md5()
+
+    def __getstate__(self):
+        return hashlib.md5
+
+    def __setstate__(self, class_):
+        self._hasher = class_()
 
     def update(self, data: bytes) -> None:
         self._hasher.update(data)
