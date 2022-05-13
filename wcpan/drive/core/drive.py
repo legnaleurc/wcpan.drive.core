@@ -183,9 +183,21 @@ class Drive(object):
         '''Get the child node list of given node id.'''
         return await self._db.get_children_by_id(node_id)
 
-    async def get_trashed_nodes(self) -> list[Node]:
+    async def get_trashed_nodes(self, flatten: bool = False) -> list[Node]:
         '''Get trashed node list.'''
-        return await self._db.get_trashed_nodes()
+        rv = await self._db.get_trashed_nodes()
+        if flatten:
+            return rv
+
+        ancestor_set = set(_.id_ for _ in rv if _.is_folder)
+        if not ancestor_set:
+            return rv
+
+        tmp: list[Node] = []
+        for node in rv:
+            if not await _in_ancestor_set(self, node, ancestor_set):
+                tmp.append(node)
+        return tmp
 
     async def get_uploaded_size(self, begin: int, end: int) -> int:
         '''
@@ -777,3 +789,15 @@ async def find_duplicate_nodes(
                 rv.append(nodes)
 
     return rv
+
+
+async def _in_ancestor_set(drive: Drive, node: Node, ancestor_set: set[Node]) -> bool:
+    if node.parent_id is None:
+        return False
+    parent = await drive.get_node_by_id(node.parent_id)
+    if parent.id_ in ancestor_set:
+        return True
+    included = await _in_ancestor_set(drive, parent, ancestor_set)
+    if included:
+        ancestor_set.add(parent.id_)
+    return included
