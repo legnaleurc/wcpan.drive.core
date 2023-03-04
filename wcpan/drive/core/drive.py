@@ -9,7 +9,7 @@ __all__ = (
 )
 
 
-from typing import AsyncGenerator, Optional, Type, Union, BinaryIO
+from typing import AsyncGenerator, Type, Union, BinaryIO
 import asyncio
 import concurrent.futures
 import contextlib
@@ -66,7 +66,7 @@ class PrivateContext(object):
         database_dsn: str,
         driver_class: Type[RemoteDriver],
         middleware_class_list: list[Type[Middleware]],
-        pool: Optional[concurrent.futures.Executor],
+        pool: concurrent.futures.Executor | None,
     ) -> None:
         self._context = ReadOnlyContext(
             config_path=config_path,
@@ -82,7 +82,7 @@ class PrivateContext(object):
         return self._database_dsn
 
     @property
-    def pool(self) -> Optional[concurrent.futures.Executor]:
+    def pool(self) -> concurrent.futures.Executor | None:
         return self._pool
 
     def create_remote_driver(self) -> RemoteDriver:
@@ -152,13 +152,13 @@ class Drive(object):
         """Get node by node id."""
         return await self._db.get_node_by_id(node_id)
 
-    async def get_node_by_path(self, path: PathOrString) -> Optional[Node]:
+    async def get_node_by_path(self, path: PathOrString) -> Node | None:
         """Get node by absolute path."""
         path = pathlib.PurePath(path)
         path = normalize_path(path)
         return await self._db.get_node_by_path(path)
 
-    async def get_path(self, node: Node) -> Optional[pathlib.PurePath]:
+    async def get_path(self, node: Node) -> pathlib.PurePath | None:
         """Get absolute path of the node."""
         return await self._db.get_path_by_id(node.id_)
 
@@ -712,7 +712,7 @@ async def upload_from_local_by_id(
     drive: Drive,
     parent_id: str,
     file_path: PathOrString,
-    media_info: Optional[MediaInfo],
+    media_info: MediaInfo | None,
     *,
     exist_ok: bool = False,
 ) -> Node:
@@ -730,7 +730,7 @@ async def upload_from_local(
     drive: Drive,
     parent_node: Node,
     file_path: PathOrString,
-    media_info: Optional[MediaInfo],
+    media_info: MediaInfo | None,
     *,
     exist_ok: bool = False,
 ) -> Node:

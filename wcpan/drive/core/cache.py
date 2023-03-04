@@ -1,4 +1,4 @@
-from typing import Optional, Pattern
+from typing import Pattern
 import asyncio
 import concurrent.futures
 import functools
@@ -118,21 +118,21 @@ class Cache(object):
     async def set_metadata(self, key: str, value: str) -> None:
         return await self._bg(set_metadata, key, value)
 
-    async def get_node_by_id(self, node_id: str) -> Optional[Node]:
+    async def get_node_by_id(self, node_id: str) -> Node | None:
         return await self._bg(get_node_by_id, node_id)
 
-    async def get_node_by_path(self, path: pathlib.PurePath) -> Optional[Node]:
+    async def get_node_by_path(self, path: pathlib.PurePath) -> Node | None:
         try:
             return await self._bg(get_node_by_path, path)
         except KeyError:
             raise CacheError("invalid cache")
 
-    async def get_path_by_id(self, node_id: str) -> Optional[pathlib.PurePath]:
+    async def get_path_by_id(self, node_id: str) -> pathlib.PurePath | None:
         return await self._bg(get_path_by_id, node_id)
 
     async def get_node_by_name_from_parent_id(
         self, name: str, parent_id: str
-    ) -> Optional[Node]:
+    ) -> Node | None:
         return await self._bg(get_node_by_name_from_parent_id, name, parent_id)
 
     async def get_children_by_id(self, node_id: str) -> list[Node]:
@@ -248,7 +248,7 @@ def set_metadata(dsn: str, key: str, value: str) -> None:
         inner_set_metadata(query, key, value)
 
 
-def get_node_by_id(dsn: str, node_id: str) -> Optional[Node]:
+def get_node_by_id(dsn: str, node_id: str) -> Node | None:
     with Database(dsn) as db, ReadOnly(db) as query:
         return inner_get_node_by_id(query, node_id)
 
@@ -256,7 +256,7 @@ def get_node_by_id(dsn: str, node_id: str) -> Optional[Node]:
 def get_node_by_path(
     dsn: str,
     path: pathlib.PurePath,
-) -> Optional[Node]:
+) -> Node | None:
     parts = path.parts[1:]
     with Database(dsn) as db, ReadOnly(db) as query:
         node_id = inner_get_metadata(query, "root_id")
@@ -280,7 +280,7 @@ def get_node_by_path(
     return node
 
 
-def get_path_by_id(dsn: str, node_id: str) -> Optional[pathlib.PurePath]:
+def get_path_by_id(dsn: str, node_id: str) -> pathlib.PurePath | None:
     parts = []
     with Database(dsn) as db, ReadOnly(db) as query:
         while True:
@@ -320,9 +320,7 @@ def get_path_by_id(dsn: str, node_id: str) -> Optional[pathlib.PurePath]:
     return path
 
 
-def get_node_by_name_from_parent_id(
-    dsn: str, name: str, parent_id: str
-) -> Optional[Node]:
+def get_node_by_name_from_parent_id(dsn: str, name: str, parent_id: str) -> Node | None:
     with Database(dsn) as db, ReadOnly(db) as query:
         query.execute(
             """
@@ -480,7 +478,7 @@ def inner_set_metadata(query: sqlite3.Cursor, key: str, value: str) -> None:
 def inner_get_node_by_id(
     query: sqlite3.Cursor,
     node_id: str,
-) -> Optional[Node]:
+) -> Node | None:
     query.execute(
         """
         SELECT name, trashed, created, modified
@@ -729,7 +727,7 @@ def inner_delete_node_by_id(query: sqlite3.Cursor, node_id: str) -> None:
 def sqlite3_regexp(
     pattern: Pattern,
     _: str,
-    cell: Optional[str],
+    cell: str | None,
 ) -> bool:
     if cell is None:
         # root node

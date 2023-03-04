@@ -54,7 +54,7 @@ class FakeMiddleware(Middleware):
         folder_name: str,
         *,
         exist_ok: bool,
-        private: Optional[PrivateDict],
+        private: PrivateDict | None,
     ) -> Node:
         return await self._driver.create_folder(
             parent_node=parent_node,
@@ -67,8 +67,8 @@ class FakeMiddleware(Middleware):
         self,
         node: Node,
         *,
-        new_parent: Optional[Node],
-        new_name: Optional[str],
+        new_parent: Node | None,
+        new_name: str | None,
     ) -> Node:
         return await self._driver.rename_node(
             node=node,
@@ -87,10 +87,10 @@ class FakeMiddleware(Middleware):
         parent_node: Node,
         file_name: str,
         *,
-        file_size: Optional[int],
-        mime_type: Optional[str],
-        media_info: Optional[MediaInfo],
-        private: Optional[PrivateDict],
+        file_size: int | None,
+        mime_type: str | None,
+        media_info: MediaInfo | None,
+        private: PrivateDict | None,
     ) -> WritableFile:
         return await self._driver.upload(
             parent_node=parent_node,

@@ -3,7 +3,7 @@ import hashlib
 import os
 import pathlib
 from tempfile import TemporaryDirectory
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator
 from unittest.mock import AsyncMock
 
 from .abc import RemoteDriver, ReadableFile, WritableFile, Hasher
@@ -78,7 +78,7 @@ class TestDriver(RemoteDriver):
         folder_name: str,
         *,
         exist_ok: bool,
-        private: Optional[PrivateDict],
+        private: PrivateDict | None,
     ) -> Node:
         await self.mock.create_folder(parent_node, folder_name, private, exist_ok)
 
@@ -92,8 +92,8 @@ class TestDriver(RemoteDriver):
         self,
         node: Node,
         *,
-        new_parent: Optional[Node],
-        new_name: Optional[str],
+        new_parent: Node | None,
+        new_name: str | None,
     ) -> Node:
         await self.mock.rename_node(node, new_parent, new_name)
 
@@ -124,10 +124,10 @@ class TestDriver(RemoteDriver):
         parent_node: Node,
         file_name: str,
         *,
-        file_size: Optional[int],
-        mime_type: Optional[str],
-        media_info: Optional[MediaInfo],
-        private: Optional[PrivateDict],
+        file_size: int | None,
+        mime_type: str | None,
+        media_info: MediaInfo | None,
+        private: PrivateDict | None,
     ) -> WritableFile:
         await self.mock.upload(
             parent_node,
@@ -345,8 +345,8 @@ class NodeWriter(WritableFile):
         pseudo: PseudoManager,
         parent_node: Node,
         file_name: str,
-        mime_type: Optional[str],
-        media_info: Optional[MediaInfo],
+        mime_type: str | None,
+        media_info: MediaInfo | None,
     ):
         self._root = root
         self._pseudo = pseudo
@@ -408,5 +408,5 @@ class NodeWriter(WritableFile):
     async def write(self, chunk: bytes) -> int:
         return self._fout.write(chunk)
 
-    async def node(self) -> Optional[Node]:
+    async def node(self) -> Node | None:
         return self._node

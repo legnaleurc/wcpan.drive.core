@@ -14,7 +14,7 @@ __all__ = (
 )
 
 
-from typing import TypedDict, Optional, Literal, Union
+from typing import TypedDict, Literal, Union
 import os
 
 import arrow
@@ -45,12 +45,12 @@ class NodeDict(TypedDict):
     modified: str
     parent_list: list[str]
     is_folder: bool
-    mime_type: Optional[str]
-    hash: Optional[str]
-    size: Optional[int]
-    image: Optional[ImageDict]
-    video: Optional[VideoDict]
-    private: Optional[PrivateDict]
+    mime_type: str | None
+    hash: str | None
+    size: int | None
+    image: ImageDict | None
+    video: VideoDict | None
+    private: PrivateDict | None
 
 
 class Node(object):
@@ -82,12 +82,12 @@ class Node(object):
         modified: arrow.Arrow,
         parent_list: list[str],
         is_folder: bool,
-        mime_type: Optional[str],
-        hash_: Optional[str],
-        size: Optional[int],
-        image: Optional[ImageDict],
-        video: Optional[VideoDict],
-        private: Optional[PrivateDict],
+        mime_type: str | None,
+        hash_: str | None,
+        size: int | None,
+        image: ImageDict | None,
+        video: VideoDict | None,
+        private: PrivateDict | None,
     ) -> None:
         self._id = id_
         self._name = name
@@ -152,15 +152,15 @@ class Node(object):
         return self._is_folder
 
     @property
-    def mime_type(self) -> Optional[str]:
+    def mime_type(self) -> str | None:
         return self._mime_type
 
     @property
-    def hash_(self) -> Optional[str]:
+    def hash_(self) -> str | None:
         return self._hash
 
     @property
-    def size(self) -> Optional[int]:
+    def size(self) -> int | None:
         return self._size
 
     @property
@@ -168,11 +168,11 @@ class Node(object):
         return self._image is not None
 
     @property
-    def image_width(self) -> Optional[int]:
+    def image_width(self) -> int | None:
         return self._image["width"] if self.is_image else None
 
     @property
-    def image_height(self) -> Optional[int]:
+    def image_height(self) -> int | None:
         return self._image["height"] if self.is_image else None
 
     @property
@@ -180,19 +180,19 @@ class Node(object):
         return self._video is not None
 
     @property
-    def video_width(self) -> Optional[int]:
+    def video_width(self) -> int | None:
         return self._video["width"] if self.is_video else None
 
     @property
-    def video_height(self) -> Optional[int]:
+    def video_height(self) -> int | None:
         return self._video["height"] if self.is_video else None
 
     @property
-    def video_ms_duration(self) -> Optional[int]:
+    def video_ms_duration(self) -> int | None:
         return self._video["ms_duration"] if self.is_video else None
 
     @property
-    def private(self) -> Optional[PrivateDict]:
+    def private(self) -> PrivateDict | None:
         return self._private
 
     def clone(

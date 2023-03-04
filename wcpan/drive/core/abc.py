@@ -14,7 +14,6 @@ from abc import ABCMeta, abstractmethod
 from typing import (
     AsyncGenerator,
     AsyncIterator,
-    Optional,
     Type,
 )
 from types import TracebackType
@@ -52,9 +51,9 @@ class ReadableFile(metaclass=ABCMeta):
     @abstractmethod
     async def __aexit__(
         self,
-        et: Optional[Type[BaseException]],
-        ev: Optional[BaseException],
-        tb: Optional[TracebackType],
+        et: Type[BaseException] | None,
+        ev: BaseException | None,
+        tb: TracebackType | None,
     ) -> bool:
         ...
 
@@ -129,9 +128,9 @@ class WritableFile(metaclass=ABCMeta):
     @abstractmethod
     async def __aexit__(
         self,
-        et: Optional[Type[BaseException]],
-        ev: Optional[BaseException],
-        tb: Optional[TracebackType],
+        et: Type[BaseException] | None,
+        ev: BaseException | None,
+        tb: TracebackType | None,
     ) -> bool:
         ...
 
@@ -155,7 +154,7 @@ class WritableFile(metaclass=ABCMeta):
         """
 
     @abstractmethod
-    async def node(self) -> Optional[Node]:
+    async def node(self) -> Node | None:
         """
         Get the wrote node. May be `None` if write failed.
         """
@@ -179,7 +178,7 @@ class RemoteDriver(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def remote(self) -> Optional[RemoteDriver]:
+    def remote(self) -> RemoteDriver | None:
         """
         Get the decorated remote driver, if any.
         """
@@ -191,9 +190,9 @@ class RemoteDriver(metaclass=ABCMeta):
     @abstractmethod
     async def __aexit__(
         self,
-        et: Optional[Type[BaseException]],
-        ev: Optional[BaseException],
-        tb: Optional[TracebackType],
+        et: Type[BaseException] | None,
+        ev: BaseException | None,
+        tb: TracebackType | None,
     ) -> bool:
         ...
 
@@ -232,7 +231,7 @@ class RemoteDriver(metaclass=ABCMeta):
         folder_name: str,
         *,
         exist_ok: bool,
-        private: Optional[PrivateDict],
+        private: PrivateDict | None,
     ) -> Node:
         """
         Create a folder.
@@ -255,8 +254,8 @@ class RemoteDriver(metaclass=ABCMeta):
         self,
         node: Node,
         *,
-        new_parent: Optional[Node],
-        new_name: Optional[str],
+        new_parent: Node | None,
+        new_name: str | None,
     ) -> Node:
         """
         Rename a node, or move to another folder, or do both.
@@ -290,10 +289,10 @@ class RemoteDriver(metaclass=ABCMeta):
         parent_node: Node,
         file_name: str,
         *,
-        file_size: Optional[int],
-        mime_type: Optional[str],
-        media_info: Optional[MediaInfo],
-        private: Optional[PrivateDict],
+        file_size: int | None,
+        mime_type: str | None,
+        media_info: MediaInfo | None,
+        private: PrivateDict | None,
     ) -> WritableFile:
         """
         Upload a file.
