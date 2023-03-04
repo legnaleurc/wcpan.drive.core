@@ -20,6 +20,8 @@ PyYAML = "^6.0"
 arrow = "^1.2.3"
 "wcpan.logger" = "^1.2"
 
+[tool.poetry.group.dev.dependencies]
+black = "^23.1.0"
 
 [build-system]
 requires = ["poetry-core"]
