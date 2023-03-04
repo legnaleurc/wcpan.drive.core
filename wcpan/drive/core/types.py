@@ -14,13 +14,13 @@ __all__ = (
 )
 
 
-from typing import TypedDict, Literal, Union
+from typing import TypedDict, Literal
 import os
 
 import arrow
 
 
-PathOrString = Union[str, os.PathLike]
+PathOrString = str | os.PathLike
 
 
 class ImageDict(TypedDict):
@@ -272,7 +272,7 @@ class UpdateChangeDict(TypedDict):
     node: NodeDict
 
 
-ChangeDict = Union[RemoveChangeDict, UpdateChangeDict]
+ChangeDict = RemoveChangeDict | UpdateChangeDict
 
 
 class MediaInfo(object):

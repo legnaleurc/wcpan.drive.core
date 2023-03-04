@@ -9,7 +9,7 @@ __all__ = (
 )
 
 
-from typing import AsyncGenerator, Type, Union, BinaryIO
+from typing import AsyncGenerator, Type, BinaryIO
 import asyncio
 import concurrent.futures
 import contextlib
@@ -108,10 +108,10 @@ class Drive(object):
         self._context = context
         self._sync_lock = asyncio.Lock()
 
-        self._remote: Union[RemoteDriver, None] = None
+        self._remote: RemoteDriver | None = None
 
         self._pool = None
-        self._db: Union[Cache, None] = None
+        self._db: Cache | None = None
 
         self._raii = None
 
