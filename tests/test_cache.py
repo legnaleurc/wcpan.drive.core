@@ -15,7 +15,6 @@ from wcpan.drive.core.util import create_executor, get_utc_now
 
 
 class TestTransaction(unittest.TestCase):
-
     def setUp(self):
         _, self._file = tempfile.mkstemp()
         with connect(self._file) as db:
@@ -31,7 +30,7 @@ class TestTransaction(unittest.TestCase):
                 rv = query.fetchone()
 
         self.assertIsNotNone(rv)
-        self.assertEqual(rv['id'], 1)
+        self.assertEqual(rv["id"], 1)
 
     def testWrite(self):
         with connect(self._file) as db:
@@ -39,60 +38,61 @@ class TestTransaction(unittest.TestCase):
                 inner_insert(query)
 
             with contextlib.closing(db.cursor()) as query:
-                query.execute('''
+                query.execute(
+                    """
                     SELECT id FROM student WHERE name=?;
-                ''', ('bob',))
+                """,
+                    ("bob",),
+                )
                 rv = query.fetchone()
 
         self.assertIsNotNone(rv)
-        self.assertEqual(rv['id'], 2)
+        self.assertEqual(rv["id"], 2)
 
     def testParallelReading(self):
-        with connect(self._file) as db1, \
-             connect(self._file) as db2:
+        with connect(self._file) as db1, connect(self._file) as db2:
             with ReadOnly(db1) as q1:
                 inner_select(q1)
                 with ReadOnly(db2) as q2:
                     inner_select(q2)
 
     def testWriteWhileReading(self):
-        with connect(self._file) as rdb, \
-             connect(self._file) as wdb:
+        with connect(self._file) as rdb, connect(self._file) as wdb:
             with self.assertRaises(sqlite3.OperationalError) as e:
                 with ReadOnly(rdb) as rq:
                     inner_select(rq)
                     with ReadWrite(wdb) as wq:
                         inner_insert(wq)
 
-        self.assertEqual(str(e.exception), 'database is locked')
+        self.assertEqual(str(e.exception), "database is locked")
 
     def testReadWhileWriting(self):
-        with connect(self._file) as rdb, \
-             connect(self._file) as wdb:
+        with connect(self._file) as rdb, connect(self._file) as wdb:
             with ReadWrite(wdb) as wq:
                 inner_insert(wq)
                 with ReadOnly(rdb) as rq:
-                    rq.execute('''
+                    rq.execute(
+                        """
                         SELECT id FROM student WHERE name=?;
-                    ''', ('bob',))
+                    """,
+                        ("bob",),
+                    )
                     rv = rq.fetchone()
 
         self.assertIsNone(rv)
 
     def testParallelWriting(self):
-        with connect(self._file) as db1, \
-             connect(self._file) as db2:
+        with connect(self._file) as db1, connect(self._file) as db2:
             with self.assertRaises(sqlite3.OperationalError) as e:
                 with ReadWrite(db1) as q1:
                     inner_insert(q1)
                     with ReadWrite(db2) as q2:
                         inner_insert(q2)
 
-        self.assertEqual(str(e.exception), 'database is locked')
+        self.assertEqual(str(e.exception), "database is locked")
 
 
 class TestNodeCache(unittest.IsolatedAsyncioTestCase):
-
     async def asyncSetUp(self):
         _, self._file = tempfile.mkstemp()
 
@@ -109,27 +109,27 @@ class TestNodeCache(unittest.IsolatedAsyncioTestCase):
 
     async def testRoot(self):
         node = await self._db.get_root_node()
-        self.assertEqual(node.id_, '__ID_ROOT__')
+        self.assertEqual(node.id_, "__ID_ROOT__")
 
     async def testSearch(self):
-        nodes = await self._db.find_nodes_by_regex(r'^f1$')
+        nodes = await self._db.find_nodes_by_regex(r"^f1$")
         self.assertEqual(len(nodes), 1)
         node = nodes[0]
-        self.assertEqual(node.id_, '__ID_2__')
+        self.assertEqual(node.id_, "__ID_2__")
         path = await self._db.get_path_by_id(node.id_)
-        self.assertEqual(str(path), '/d1/f1')
+        self.assertEqual(str(path), "/d1/f1")
 
     async def testGetTrashedNodes(self):
         nodes = await self._db.get_trashed_nodes()
         self.assertEqual(len(nodes), 1)
         node = nodes[0]
-        self.assertEqual(node.id_, '__ID_4__')
+        self.assertEqual(node.id_, "__ID_4__")
         path = await self._db.get_path_by_id(node.id_)
-        self.assertEqual(str(path), '/d1/f3')
+        self.assertEqual(str(path), "/d1/f3")
 
     async def testGetInvalidPath(self):
         with self.assertRaises(CacheError):
-            await self._db.get_path_by_id('__INVALID_ID__')
+            await self._db.get_path_by_id("__INVALID_ID__")
 
     async def testGetUploadedSize(self):
         now = get_utc_now()
@@ -148,34 +148,45 @@ def connect(path):
 
 def prepare(db):
     with contextlib.closing(db.cursor()) as query:
-        query.execute('''
+        query.execute(
+            """
             CREATE TABLE student (
                 id INTEGER NOT NULL,
                 name VARCHAR(64),
                 PRIMARY KEY (id)
             );
-        ''')
-        query.execute('''
+        """
+        )
+        query.execute(
+            """
             INSERT INTO student
             (id, name)
             VALUES
             (?, ?);
-        ''', (1, 'alice'))
+        """,
+            (1, "alice"),
+        )
 
 
 def inner_select(query):
-    query.execute('''
+    query.execute(
+        """
         SELECT id FROM student WHERE name=?;
-    ''', ('alice',))
+    """,
+        ("alice",),
+    )
 
 
 def inner_insert(query):
-    query.execute('''
+    query.execute(
+        """
         INSERT INTO student
         (id, name)
         VALUES
         (?, ?);
-    ''', (2, 'bob'))
+    """,
+        (2, "bob"),
+    )
 
 
 async def initialize_nodes(db):
@@ -185,27 +196,27 @@ async def initialize_nodes(db):
     await db.insert_node(root_node)
 
     builder = pseudo.build_node()
-    builder.to_folder('d1', root_node)
+    builder.to_folder("d1", root_node)
     d1 = builder.commit()
 
     builder = pseudo.build_node()
-    builder.to_folder('d2', root_node)
+    builder.to_folder("d2", root_node)
     d2 = builder.commit()
 
     builder = pseudo.build_node()
-    builder.to_folder('f1', d1)
-    builder.to_file(1337, '__F1_MD5__', 'text/plain')
+    builder.to_folder("f1", d1)
+    builder.to_file(1337, "__F1_MD5__", "text/plain")
     builder.commit()
 
     builder = pseudo.build_node()
-    builder.to_folder('f2', d2)
-    builder.to_file(1234, '__F2_MD5__', 'text/plain')
+    builder.to_folder("f2", d2)
+    builder.to_file(1234, "__F2_MD5__", "text/plain")
     builder.commit()
 
     builder = pseudo.build_node()
-    builder.to_folder('f3', d1)
-    builder.to_file(4321, '__F3_MD5__', 'text/plain')
+    builder.to_folder("f3", d1)
+    builder.to_file(4321, "__F3_MD5__", "text/plain")
     builder.to_trashed()
     builder.commit()
 
-    await db.apply_changes(pseudo.changes, '2')
+    await db.apply_changes(pseudo.changes, "2")

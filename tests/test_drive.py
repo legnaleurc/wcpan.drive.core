@@ -16,14 +16,15 @@ from wcpan.drive.core.test import test_factory, TestDriver
 
 
 class TestDrive(unittest.IsolatedAsyncioTestCase):
-
     async def asyncSetUp(self):
         async with contextlib.AsyncExitStack() as stack:
             factory = stack.enter_context(
-                test_factory(middleware_list=[
-                    'tests.driver.FakeMiddleware',
-                    'tests.driver.FakeMiddleware',
-                ])
+                test_factory(
+                    middleware_list=[
+                        "tests.driver.FakeMiddleware",
+                        "tests.driver.FakeMiddleware",
+                    ]
+                )
             )
             self._drive: Drive = await stack.enter_async_context(factory())
             self._driver: TestDriver = self._drive.remote.remote.remote
@@ -42,28 +43,28 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # normal file and folder
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_1', root_node)
+        builder.to_folder("name_1", root_node)
         node_1 = builder.commit()
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_2', node_1)
-        builder.to_file(2, 'hash_2', 'text/plain')
+        builder.to_folder("name_2", node_1)
+        builder.to_file(2, "hash_2", "text/plain")
         node_2 = builder.commit()
 
         pseudo_changes = driver.pseudo.changes
         applied_changes = [change async for change in self._drive.sync()]
         self.assertEqual(applied_changes, pseudo_changes)
 
-        node = await self._drive.get_node_by_path('/name_1')
+        node = await self._drive.get_node_by_path("/name_1")
         self.assertIsNotNone(node)
         self.assertTrue(node.is_folder)
         self.assertEqual(node.id_, node_1.id_)
-        node = await self._drive.get_node_by_path('/name_1/name_2')
+        node = await self._drive.get_node_by_path("/name_1/name_2")
         self.assertIsNotNone(node)
         self.assertTrue(node.is_file)
         self.assertEqual(node.id_, node_2.id_)
         self.assertEqual(node.size, 2)
-        self.assertEqual(node.hash_, 'hash_2')
-        self.assertEqual(node.mime_type, 'text/plain')
+        self.assertEqual(node.hash_, "hash_2")
+        self.assertEqual(node.mime_type, "text/plain")
 
         # TODO
         # # atomic
@@ -87,13 +88,13 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # image and video
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_4', node_1)
-        builder.to_file(4, 'hash_4', 'image/png')
+        builder.to_folder("name_4", node_1)
+        builder.to_file(4, "hash_4", "image/png")
         builder.to_image(640, 480)
         node_4 = builder.commit()
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_5', node_1)
-        builder.to_file(5, 'hash_5', 'video/mpeg')
+        builder.to_folder("name_5", node_1)
+        builder.to_file(5, "hash_5", "video/mpeg")
         builder.to_video(640, 480, 5)
         node_5 = builder.commit()
 
@@ -101,11 +102,11 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         applied_changes = [change async for change in self._drive.sync()]
         self.assertEqual(applied_changes, pseudo_changes)
 
-        node = await self._drive.get_node_by_path('/name_1/name_4')
+        node = await self._drive.get_node_by_path("/name_1/name_4")
         self.assertTrue(node.is_image)
         self.assertEqual(node.image_width, 640)
         self.assertEqual(node.image_height, 480)
-        node = await self._drive.get_node_by_path('/name_1/name_5')
+        node = await self._drive.get_node_by_path("/name_1/name_5")
         self.assertTrue(node.is_video)
         self.assertEqual(node.video_width, 640)
         self.assertEqual(node.video_height, 480)
@@ -118,7 +119,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         applied_changes = [change async for change in self._drive.sync()]
         self.assertEqual(applied_changes, pseudo_changes)
 
-        node = await self._drive.get_node_by_path('/name_1/name_2')
+        node = await self._drive.get_node_by_path("/name_1/name_2")
         self.assertIsNone(node)
 
         # delete folder
@@ -128,7 +129,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         applied_changes = [change async for change in self._drive.sync()]
         self.assertEqual(applied_changes, pseudo_changes)
 
-        node = await self._drive.get_node_by_path('/name_1')
+        node = await self._drive.get_node_by_path("/name_1")
         self.assertIsNone(node)
         node = await self._drive.get_node_by_id(node_4.id_)
         self.assertIsNone(node.parent_id)
@@ -142,8 +143,8 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         root_node = await driver.fetch_root_node()
 
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_1', root_node)
-        builder.to_file(1, 'hash_1', 'text/plain')
+        builder.to_folder("name_1", root_node)
+        builder.to_file(1, "hash_1", "text/plain")
         builder.commit()
 
         async for dummy_change in self._drive.sync():
@@ -151,7 +152,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # invalid parent
         with self.assertRaises(TypeError):
-            await api(None, 'name')
+            await api(None, "name")
         mock.assert_not_called()
         mock.reset_mock()
 
@@ -162,33 +163,33 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         mock.reset_mock()
 
         # invalid parent
-        node = await self._drive.get_node_by_path('/name_1')
+        node = await self._drive.get_node_by_path("/name_1")
         self.assertIsNotNone(node)
         with self.assertRaises(ParentIsNotFolderError):
-            await api(node, 'invalid')
+            await api(node, "invalid")
         mock.assert_not_called()
         mock.reset_mock()
 
         # conflict
         with self.assertRaises(NodeConflictedError):
-            await api(root_node, 'name_1')
+            await api(root_node, "name_1")
         mock.assert_not_called()
         mock.reset_mock()
 
         # good calls
-        await api(root_node, 'name')
+        await api(root_node, "name")
         mock.assert_called_once_with(
             root_node,
-            'name',
+            "name",
             None,
             False,
         )
         mock.reset_mock()
 
-        await api(root_node, 'name', True)
+        await api(root_node, "name", True)
         mock.assert_called_once_with(
             root_node,
-            'name',
+            "name",
             None,
             True,
         )
@@ -202,25 +203,25 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         root_node = await driver.fetch_root_node()
 
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_1', root_node)
+        builder.to_folder("name_1", root_node)
         node_1 = builder.commit()
 
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_2', node_1)
-        builder.to_file(2, 'hash_2', 'text/plain')
+        builder.to_folder("name_2", node_1)
+        builder.to_file(2, "hash_2", "text/plain")
         builder.commit()
 
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_3', node_1)
+        builder.to_folder("name_3", node_1)
         builder.commit()
 
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_4', node_1)
-        builder.to_file(4, 'hash_4', 'text/plain')
+        builder.to_folder("name_4", node_1)
+        builder.to_file(4, "hash_4", "text/plain")
         builder.commit()
 
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_5', node_1)
+        builder.to_folder("name_5", node_1)
         builder.to_trashed()
         node_5 = builder.commit()
 
@@ -234,14 +235,14 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         mock.reset_mock()
 
         # at least have a new parent or new name
-        node = await self._drive.get_node_by_path('/name_1')
+        node = await self._drive.get_node_by_path("/name_1")
         with self.assertRaises(TypeError):
             await api(node, None, None)
         mock.assert_not_called()
         mock.reset_mock()
 
         # do not touch trash can
-        node1 = await self._drive.get_node_by_path('/name_1')
+        node1 = await self._drive.get_node_by_path("/name_1")
         node2 = await self._drive.get_node_by_id(node_5.id_)
         with self.assertRaises(TrashedNodeError):
             await api(node1, node2, None)
@@ -251,7 +252,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         mock.reset_mock()
 
         # do not move to the source folder
-        node = await self._drive.get_node_by_path('/name_1')
+        node = await self._drive.get_node_by_path("/name_1")
         with self.assertRaises(LineageError):
             await api(node, node, None)
         mock.assert_not_called()
@@ -259,59 +260,59 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # do not move root
         with self.assertRaises(RootNodeError):
-            await api_alt('/', '/name_1')
+            await api_alt("/", "/name_1")
         mock.assert_not_called()
         mock.reset_mock()
 
         # do not overwrite file
         with self.assertRaises(NodeConflictedError):
-            await api_alt('/name_1/name_2', '/name_1/name_4')
+            await api_alt("/name_1/name_2", "/name_1/name_4")
         mock.assert_not_called()
         mock.reset_mock()
 
         # do not move parent to descendant folders
         with self.assertRaises(LineageError):
-            await api_alt('/name_1', '/name_1/name_3')
+            await api_alt("/name_1", "/name_1/name_3")
         mock.assert_not_called()
         mock.reset_mock()
 
         # do not move invalid node
         with self.assertRaises(NodeNotFoundError):
-            await api_alt('/invalid', '/name_1')
+            await api_alt("/invalid", "/name_1")
         mock.assert_not_called()
         mock.reset_mock()
 
         # do not move to invalid path
         with self.assertRaises(LineageError):
-            await api_alt('/name_1/name_2', '/invalid/invalid')
+            await api_alt("/name_1/name_2", "/invalid/invalid")
         with self.assertRaises(LineageError):
-            await api_alt('/name_1/name_2', './invalid/invalid')
+            await api_alt("/name_1/name_2", "./invalid/invalid")
         mock.assert_not_called()
         mock.reset_mock()
 
         # move to absolute path
-        node = await self._drive.get_node_by_path('/name_1')
-        await api_alt('/name_1', '/new')
-        mock.assert_called_once_with(node, root_node, 'new')
+        node = await self._drive.get_node_by_path("/name_1")
+        await api_alt("/name_1", "/new")
+        mock.assert_called_once_with(node, root_node, "new")
         mock.reset_mock()
 
         # move to relative folder
-        node1 = await self._drive.get_node_by_path('/name_1/name_2')
-        node2 = await self._drive.get_node_by_path('/name_1/name_3')
-        await api_alt('/name_1/name_2', './name_3')
+        node1 = await self._drive.get_node_by_path("/name_1/name_2")
+        node2 = await self._drive.get_node_by_path("/name_1/name_3")
+        await api_alt("/name_1/name_2", "./name_3")
         mock.assert_called_once_with(node1, node2, None)
         mock.reset_mock()
 
         # move to relative file
-        node1 = await self._drive.get_node_by_path('/name_1/name_2')
-        node2 = await self._drive.get_node_by_path('/name_1/name_3')
-        await api_alt('/name_1/name_2', './name_3/name_4')
-        mock.assert_called_once_with(node1, node2, 'name_4')
+        node1 = await self._drive.get_node_by_path("/name_1/name_2")
+        node2 = await self._drive.get_node_by_path("/name_1/name_3")
+        await api_alt("/name_1/name_2", "./name_3/name_4")
+        mock.assert_called_once_with(node1, node2, "name_4")
         mock.reset_mock()
 
         # move up
-        node = await self._drive.get_node_by_path('/name_1/name_2')
-        await api_alt('/name_1/name_2', '..')
+        node = await self._drive.get_node_by_path("/name_1/name_2")
+        await api_alt("/name_1/name_2", "..")
         mock.assert_called_once_with(node, root_node, None)
         mock.reset_mock()
 
@@ -322,7 +323,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         root_node = await driver.fetch_root_node()
 
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_1', root_node)
+        builder.to_folder("name_1", root_node)
         builder.commit()
 
         async for dummy_change in self._drive.sync():
@@ -341,7 +342,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         mock.reset_mock()
 
         # good call
-        node = await self._drive.get_node_by_path('/name_1')
+        node = await self._drive.get_node_by_path("/name_1")
         await api(node)
         mock.assert_called_once_with(node)
         mock.reset_mock()
@@ -353,19 +354,19 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         root_node = await driver.fetch_root_node()
 
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_1', root_node)
+        builder.to_folder("name_1", root_node)
         node_1 = builder.commit()
 
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_2', node_1)
-        builder.to_file(2, 'hash_2', 'text/plain')
+        builder.to_folder("name_2", node_1)
+        builder.to_file(2, "hash_2", "text/plain")
         builder.commit()
 
         async for dummy_change in self._drive.sync():
             pass
 
         # do not download folder
-        node = await self._drive.get_node_by_path('/name_1')
+        node = await self._drive.get_node_by_path("/name_1")
         with self.assertRaises(DownloadError):
             await api(node)
         mock.assert_not_called()
@@ -378,7 +379,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         mock.reset_mock()
 
         # good call
-        node = await self._drive.get_node_by_path('/name_1/name_2')
+        node = await self._drive.get_node_by_path("/name_1/name_2")
         await api(node)
         mock.assert_called_once_with(node)
         mock.reset_mock()
@@ -390,34 +391,34 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         root_node = await driver.fetch_root_node()
 
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_1', root_node)
+        builder.to_folder("name_1", root_node)
         node_1 = builder.commit()
 
         builder = driver.pseudo.build_node()
-        builder.to_folder('name_2', node_1)
-        builder.to_file(2, 'hash_2', 'text/plain')
+        builder.to_folder("name_2", node_1)
+        builder.to_file(2, "hash_2", "text/plain")
         builder.commit()
 
         async for dummy_change in self._drive.sync():
             pass
 
         # do not upload to a file
-        node = await self._drive.get_node_by_path('/name_1/name_2')
+        node = await self._drive.get_node_by_path("/name_1/name_2")
         with self.assertRaises(ParentIsNotFolderError):
-            await api(node, 'name_3')
+            await api(node, "name_3")
         mock.assert_not_called()
         mock.reset_mock()
 
         # do not conflict
-        node = await self._drive.get_node_by_path('/name_1')
+        node = await self._drive.get_node_by_path("/name_1")
         with self.assertRaises(NodeConflictedError):
-            await api(node, 'name_2')
+            await api(node, "name_2")
         mock.assert_not_called()
         mock.reset_mock()
 
         # do not accept invalid node
         with self.assertRaises(TypeError):
-            await api(None, 'name_3')
+            await api(None, "name_3")
         mock.assert_not_called()
         mock.reset_mock()
 
@@ -428,16 +429,16 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         mock.reset_mock()
 
         # good calls
-        await api(node, 'name_3')
-        mock.assert_called_once_with(node, 'name_3', None, None, None, None)
+        await api(node, "name_3")
+        mock.assert_called_once_with(node, "name_3", None, None, None, None)
         mock.reset_mock()
 
-        await api(node, 'name_3', file_size=123, mime_type='test/plain')
+        await api(node, "name_3", file_size=123, mime_type="test/plain")
         mock.assert_called_once_with(
             node,
-            'name_3',
+            "name_3",
             123,
-            'test/plain',
+            "test/plain",
             None,
             None,
         )
@@ -455,16 +456,18 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(CacheError):
             await self._drive.get_root_node()
 
-        node = await self._drive.get_node_by_id('not_exist')
+        node = await self._drive.get_node_by_id("not_exist")
         self.assertIsNone(node)
 
         with self.assertRaises(CacheError):
-            await self._drive.get_node_by_path('/')
+            await self._drive.get_node_by_path("/")
 
-        node = await self._drive.get_node_by_name_from_parent_id('not_exist', 'not_exist')
+        node = await self._drive.get_node_by_name_from_parent_id(
+            "not_exist", "not_exist"
+        )
         self.assertIsNone(node)
 
-        node_list = await self._drive.get_children_by_id('not_exist')
+        node_list = await self._drive.get_children_by_id("not_exist")
         self.assertFalse(node_list)
 
         node_list = await self._drive.get_trashed_nodes()

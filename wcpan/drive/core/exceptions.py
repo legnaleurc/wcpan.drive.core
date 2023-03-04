@@ -19,12 +19,11 @@ class CacheError(DriveError):
 
 
 class InvalidNameError(DriveError):
-
     def __init__(self, name: str) -> None:
         self._name = name
 
     def __str__(self) -> str:
-        return f'invalid name: {self._name}'
+        return f"invalid name: {self._name}"
 
 
 class NodeTreeError(DriveError):
@@ -32,12 +31,11 @@ class NodeTreeError(DriveError):
 
 
 class NodeConflictedError(NodeTreeError):
-
     def __init__(self, node: Node) -> None:
         self._node = node
 
     def __str__(self) -> str:
-        return f'node already exists: {self.node.name}'
+        return f"node already exists: {self.node.name}"
 
     @property
     def node(self) -> Node:
@@ -45,21 +43,19 @@ class NodeConflictedError(NodeTreeError):
 
 
 class ParentNotFoundError(NodeTreeError):
-
     def __init__(self, id_: str) -> None:
         self._id = id_
 
     def __str__(self) -> str:
-        return f'parent id not found: {self._id}'
+        return f"parent id not found: {self._id}"
 
 
 class NodeNotFoundError(NodeTreeError):
-
     def __init__(self, path_or_id: str) -> None:
         self._path_or_id = path_or_id
 
     def __str__(self) -> str:
-        return f'node not found: {self._path_or_id}'
+        return f"node not found: {self._path_or_id}"
 
 
 class RootNodeError(NodeTreeError):
@@ -88,4 +84,3 @@ class DownloadError(DriveError):
 
 class UploadError(DriveError):
     pass
-

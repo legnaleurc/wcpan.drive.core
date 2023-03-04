@@ -1,6 +1,11 @@
 __all__ = (
-    'Drive', 'DriveFactory', 'download_to_local_by_id', 'download_to_local',
-    'upload_from_local_by_id', 'upload_from_local', 'find_duplicate_nodes',
+    "Drive",
+    "DriveFactory",
+    "download_to_local_by_id",
+    "download_to_local",
+    "upload_from_local_by_id",
+    "upload_from_local",
+    "find_duplicate_nodes",
 )
 
 
@@ -54,8 +59,8 @@ _CHUNK_SIZE = 64 * 1024
 
 
 class PrivateContext(object):
-
-    def __init__(self,
+    def __init__(
+        self,
         config_path: pathlib.Path,
         data_path: pathlib.Path,
         database_dsn: str,
@@ -91,13 +96,13 @@ class PrivateContext(object):
 
 
 class Drive(object):
-    '''Interact with the drive.
+    """Interact with the drive.
 
     Please use DriveFactory to create an instance.
 
     The core module DOES NOT provide ANY implementation for cloud drive by
     itself. You need a driver class, which can be set in DriveFactory.
-    '''
+    """
 
     def __init__(self, context: PrivateContext) -> None:
         self._context = context
@@ -110,7 +115,7 @@ class Drive(object):
 
         self._raii = None
 
-    async def __aenter__(self) -> 'Drive':
+    async def __aenter__(self) -> "Drive":
         async with contextlib.AsyncExitStack() as stack:
             if not self._context.pool:
                 self._pool = stack.enter_context(create_executor())
@@ -136,55 +141,57 @@ class Drive(object):
 
     @property
     def remote(self) -> RemoteDriver:
-        '''Get the remote driver'''
+        """Get the remote driver"""
         return self._remote
 
     async def get_root_node(self) -> Node:
-        '''Get the root node.'''
+        """Get the root node."""
         return await self._db.get_root_node()
 
     async def get_node_by_id(self, node_id: str) -> Node:
-        '''Get node by node id.'''
+        """Get node by node id."""
         return await self._db.get_node_by_id(node_id)
 
     async def get_node_by_path(self, path: PathOrString) -> Optional[Node]:
-        '''Get node by absolute path.'''
+        """Get node by absolute path."""
         path = pathlib.PurePath(path)
         path = normalize_path(path)
         return await self._db.get_node_by_path(path)
 
     async def get_path(self, node: Node) -> Optional[pathlib.PurePath]:
-        '''Get absolute path of the node.'''
+        """Get absolute path of the node."""
         return await self._db.get_path_by_id(node.id_)
 
     async def get_path_by_id(self, node_id: str) -> str:
-        '''Get absolute path of the node id.'''
+        """Get absolute path of the node id."""
         return await self._db.get_path_by_id(node_id)
 
-    async def get_node_by_name_from_parent_id(self,
+    async def get_node_by_name_from_parent_id(
+        self,
         name: str,
         parent_id: str,
     ) -> Node:
-        '''Get node by given name and parent id.'''
+        """Get node by given name and parent id."""
         return await self._db.get_node_by_name_from_parent_id(name, parent_id)
 
-    async def get_node_by_name_from_parent(self,
+    async def get_node_by_name_from_parent(
+        self,
         name: str,
         parent: Node,
     ) -> Node:
-        '''Get node by given name and parent node.'''
+        """Get node by given name and parent node."""
         return await self._db.get_node_by_name_from_parent_id(name, parent.id_)
 
     async def get_children(self, node: Node) -> list[Node]:
-        '''Get the child node list of given node.'''
+        """Get the child node list of given node."""
         return await self._db.get_children_by_id(node.id_)
 
     async def get_children_by_id(self, node_id: str) -> list[Node]:
-        '''Get the child node list of given node id.'''
+        """Get the child node list of given node id."""
         return await self._db.get_children_by_id(node_id)
 
     async def get_trashed_nodes(self, flatten: bool = False) -> list[Node]:
-        '''Get trashed node list.'''
+        """Get trashed node list."""
         rv = await self._db.get_trashed_nodes()
         if flatten:
             return rv
@@ -200,30 +207,31 @@ class Drive(object):
         return tmp
 
     async def get_uploaded_size(self, begin: int, end: int) -> int:
-        '''
+        """
         Get uploaded file size in a time range
 
         `begin` and `end` are UTC timestamps in second.
-        '''
+        """
         return await self._db.get_uploaded_size(begin, end)
 
     async def find_nodes_by_regex(self, pattern: str) -> list[Node]:
-        '''Find nodes by name.'''
+        """Find nodes by name."""
         return await self._db.find_nodes_by_regex(pattern)
 
     async def find_orphan_nodes(self) -> list[Node]:
-        '''Find nodes which are dangling from root.'''
+        """Find nodes which are dangling from root."""
         return await self._db.find_orphan_nodes()
 
     async def find_multiple_parents_nodes(self) -> list[Node]:
-        '''Find nodes which have two or more parents.'''
+        """Find nodes which have two or more parents."""
         return await self._db.find_multiple_parents_nodes()
 
-    async def walk(self,
+    async def walk(
+        self,
         node: Node,
         include_trashed: bool = False,
     ) -> AsyncGenerator[tuple[Node, list[Node], list[Node]], None]:
-        '''Traverse nodes from given node.'''
+        """Traverse nodes from given node."""
         if not node.is_folder:
             return
         q = [node]
@@ -247,23 +255,24 @@ class Drive(object):
 
             q.extend(folders)
 
-    async def create_folder(self,
+    async def create_folder(
+        self,
         parent_node: Node,
         folder_name: str,
         exist_ok: bool = False,
     ) -> Node:
-        '''Create a folder.'''
+        """Create a folder."""
         # sanity check
         if not self._remote:
             raise InvalidRemoteDriverError()
         if not parent_node:
-            raise TypeError('invalid parent node')
+            raise TypeError("invalid parent node")
         if not parent_node.is_folder:
-            raise ParentIsNotFolderError('invalid parent node')
+            raise ParentIsNotFolderError("invalid parent node")
         if not folder_name:
-            raise TypeError('invalid folder name')
+            raise TypeError("invalid folder name")
         if not is_valid_name(folder_name):
-            raise TypeError('invalid folder name: no `/` or `\\` allowed')
+            raise TypeError("invalid folder name: no `/` or `\\` allowed")
         if not await self.is_authorized():
             raise UnauthorizedError()
 
@@ -283,25 +292,26 @@ class Drive(object):
         )
 
     async def download_by_id(self, node_id: str) -> ReadableFile:
-        '''Download the node.'''
+        """Download the node."""
         node = await self.get_node_by_id(node_id)
         return await self.download(node)
 
     async def download(self, node: Node) -> ReadableFile:
-        '''Download the node.'''
+        """Download the node."""
         # sanity check
         if not self._remote:
             raise InvalidRemoteDriverError()
         if not node:
-            raise TypeError('node is none')
+            raise TypeError("node is none")
         if node.is_folder:
-            raise DownloadError('node should be a file')
+            raise DownloadError("node should be a file")
         if not await self.is_authorized():
             raise UnauthorizedError()
 
         return await self._remote.download(node)
 
-    async def upload_by_id(self,
+    async def upload_by_id(
+        self,
         parent_id: str,
         file_name: str,
         *,
@@ -309,7 +319,7 @@ class Drive(object):
         mime_type: str = None,
         media_info: MediaInfo = None,
     ) -> WritableFile:
-        '''Upload file.'''
+        """Upload file."""
         parent_node = await self.get_node_by_id(parent_id)
         return await self.upload(
             parent_node,
@@ -319,7 +329,8 @@ class Drive(object):
             media_info=media_info,
         )
 
-    async def upload(self,
+    async def upload(
+        self,
         parent_node: Node,
         file_name: str,
         *,
@@ -327,18 +338,18 @@ class Drive(object):
         mime_type: str = None,
         media_info: MediaInfo = None,
     ) -> WritableFile:
-        '''Upload file.'''
+        """Upload file."""
         # sanity check
         if not self._remote:
             raise InvalidRemoteDriverError()
         if not parent_node:
-            raise TypeError('invalid parent node')
+            raise TypeError("invalid parent node")
         if not parent_node.is_folder:
-            raise ParentIsNotFolderError('invalid parent node')
+            raise ParentIsNotFolderError("invalid parent node")
         if not file_name:
-            raise TypeError('invalid file name')
+            raise TypeError("invalid file name")
         if not is_valid_name(file_name):
-            raise TypeError('invalid file name: no `/` or `\\` allowed')
+            raise TypeError("invalid file name: no `/` or `\\` allowed")
         if not await self.is_authorized():
             raise UnauthorizedError()
 
@@ -356,59 +367,60 @@ class Drive(object):
         )
 
     async def trash_node_by_id(self, node_id: str) -> None:
-        '''Move the node to trash.'''
+        """Move the node to trash."""
         node = await self.get_node_by_id(node_id)
         await self.trash_node(node)
 
     async def trash_node(self, node: Node) -> None:
-        '''Move the node to trash.'''
+        """Move the node to trash."""
         # sanity check
         if not self._remote:
             raise InvalidRemoteDriverError()
         if not node:
-            raise TypeError('invalid node')
+            raise TypeError("invalid node")
         if not await self.is_authorized():
             raise UnauthorizedError()
 
         root_node = await self.get_root_node()
         if root_node.id_ == node.id_:
-            raise RootNodeError('cannot trash root node')
+            raise RootNodeError("cannot trash root node")
         await self._remote.trash_node(node)
 
-    async def rename_node(self,
+    async def rename_node(
+        self,
         node: Node,
         new_parent: Node = None,
         new_name: str = None,
     ) -> Node:
-        '''Move or rename the node.'''
+        """Move or rename the node."""
         # sanity check
         if not self._remote:
             raise InvalidRemoteDriverError()
         if not node:
-            raise TypeError('source node is none')
+            raise TypeError("source node is none")
         if node.trashed:
-            raise TrashedNodeError('source node is in trash')
+            raise TrashedNodeError("source node is in trash")
         root_node = await self.get_root_node()
         if node.id_ == root_node.id_:
-            raise RootNodeError('source node is the root node')
+            raise RootNodeError("source node is the root node")
         if not await self.is_authorized():
             raise UnauthorizedError()
 
         if not new_parent and not new_name:
-            raise TypeError('need new_parent or new_name')
+            raise TypeError("need new_parent or new_name")
 
         if new_name and not is_valid_name(new_name):
-            raise TypeError('invalid new name: no `/` or `\\` allowed')
+            raise TypeError("invalid new name: no `/` or `\\` allowed")
 
         if new_parent:
             if new_parent.trashed:
-                raise TrashedNodeError('new_parent is in trash')
+                raise TrashedNodeError("new_parent is in trash")
             if new_parent.is_file:
-                raise ParentIsNotFolderError('new_parent is not a folder')
+                raise ParentIsNotFolderError("new_parent is not a folder")
             ancestor = new_parent
             while True:
                 if ancestor.id_ == node.id_:
-                    raise LineageError('new_parent is a descendant of node')
+                    raise LineageError("new_parent is a descendant of node")
                 if not ancestor.parent_id:
                     break
                 ancestor = await self.get_node_by_id(ancestor.parent_id)
@@ -419,21 +431,23 @@ class Drive(object):
             new_name=new_name,
         )
 
-    async def rename_node_by_id(self,
+    async def rename_node_by_id(
+        self,
         node_id: str,
         new_parent_id: str = None,
         new_name: str = None,
     ) -> Node:
-        '''Move or rename the node.'''
+        """Move or rename the node."""
         node = await self.get_node_by_id(node_id)
         new_parent = await self.get_node_by_id(new_parent_id)
         return await self.rename_node(node, new_parent, new_name)
 
-    async def rename_node_by_path(self,
+    async def rename_node_by_path(
+        self,
         src_path: PathOrString,
         dst_path: PathOrString,
     ) -> Node:
-        '''
+        """
         Rename or move `src_path` to `dst_path`. `dst_path` can be a file name
         or an absolute path.
 
@@ -445,7 +459,7 @@ class Drive(object):
 
         If `dst_path` does not exist yet, `src_path` will be moved and rename to
         `dst_path`.
-        '''
+        """
         node = await self.get_node_by_path(src_path)
         if not node:
             raise NodeNotFoundError(src_path)
@@ -460,10 +474,10 @@ class Drive(object):
             # case 1.1 - a name, not path
             if dst.name == dst_path:
                 # case 1.1.1 - move to the same folder, do nothing
-                if dst.name == '.':
+                if dst.name == ".":
                     return node
                 # case 1.1.2 - rename only
-                if dst.name != '..':
+                if dst.name != "..":
                     return await self.rename_node(node, None, dst.name)
                 # case 1.1.3 - move to parent folder, the same as case 1.2
 
@@ -478,7 +492,7 @@ class Drive(object):
             # move to the parent folder of the destination
             new_parent = await self.get_node_by_path(str(dst.parent))
             if not new_parent:
-                raise LineageError(f'no direct path to {dst_path}')
+                raise LineageError(f"no direct path to {dst_path}")
             return await self.rename_node(node, new_parent, dst.name)
         # case 2.2 - the destination is a file
         if dst_node.is_file:
@@ -487,13 +501,14 @@ class Drive(object):
         # case 2.3 - the distination is a folder
         return await self.rename_node(node, dst_node, None)
 
-    async def sync(self,
+    async def sync(
+        self,
         check_point: str = None,
     ) -> AsyncGenerator[ChangeDict, None]:
-        '''Synchronize the local node cache.
+        """Synchronize the local node cache.
 
         This is the ONLY function which will modify the local cache.
-        '''
+        """
         if not self._remote:
             raise InvalidRemoteDriverError()
         if not await self.is_authorized():
@@ -505,7 +520,7 @@ class Drive(object):
 
             if not dry_run:
                 try:
-                    check_point = await self._db.get_metadata('check_point')
+                    check_point = await self._db.get_metadata("check_point")
                 except KeyError:
                     check_point = initial_check_point
 
@@ -522,7 +537,7 @@ class Drive(object):
                     yield change
 
     async def get_hasher(self) -> Hasher:
-        '''Get a Hasher instance for checksum calculation.'''
+        """Get a Hasher instance for checksum calculation."""
         if not self._remote:
             raise InvalidRemoteDriverError()
         return await self._remote.get_hasher()
@@ -544,7 +559,6 @@ class Drive(object):
 
 
 class DriveFactory(object):
-
     def __init__(self) -> None:
         self._config_path = get_default_config_path()
         self._data_path = get_default_data_path()
@@ -554,7 +568,7 @@ class DriveFactory(object):
 
     @property
     def config_path(self) -> pathlib.Path:
-        '''The path which contains config files.'''
+        """The path which contains config files."""
         return self._config_path
 
     @config_path.setter
@@ -563,7 +577,7 @@ class DriveFactory(object):
 
     @property
     def data_path(self) -> pathlib.Path:
-        '''The path which contains data files.'''
+        """The path which contains data files."""
         return self._data_path
 
     @data_path.setter
@@ -571,22 +585,22 @@ class DriveFactory(object):
         self._data_path = pathlib.Path(path)
 
     def load_config(self) -> None:
-        '''The path which contains data files.'''
+        """The path which contains data files."""
         # ensure we can access the folder
         self.config_path.mkdir(parents=True, exist_ok=True)
 
-        config_file_path = self.config_path / 'core.yaml'
+        config_file_path = self.config_path / "core.yaml"
 
-        with config_file_path.open('r') as fin:
+        with config_file_path.open("r") as fin:
             config_dict = yaml.safe_load(fin)
 
-        for key in ('version', 'database', 'driver', 'middleware'):
+        for key in ("version", "database", "driver", "middleware"):
             if key not in config_dict:
-                raise ValueError(f'no required key: {key}')
+                raise ValueError(f"no required key: {key}")
 
-        self.database = config_dict['database']
-        self.driver = config_dict['driver']
-        self.middleware_list = config_dict['middleware']
+        self.database = config_dict["database"]
+        self.driver = config_dict["driver"]
+        self.middleware_list = config_dict["middleware"]
 
     def __call__(self, pool: concurrent.futures.Executor = None) -> Drive:
         # ensure we can access the folders
@@ -602,14 +616,18 @@ class DriveFactory(object):
         driver_class = import_class(self.driver)
         min_, max_ = driver_class.get_version_range()
         if not min_ <= DRIVER_VERSION <= max_:
-            raise InvalidRemoteDriverError(f'invalid version: required {DRIVER_VERSION}, got ({min_}, {max_})')
+            raise InvalidRemoteDriverError(
+                f"invalid version: required {DRIVER_VERSION}, got ({min_}, {max_})"
+            )
 
         middleware_class_list = []
         for middleware in self.middleware_list:
             middleware_class = import_class(middleware)
             min_, max_ = middleware_class.get_version_range()
             if not min_ <= DRIVER_VERSION <= max_:
-                raise InvalidMiddlewareError(f'invalid version: required {DRIVER_VERSION}, got ({min_}, {max_})')
+                raise InvalidMiddlewareError(
+                    f"invalid version: required {DRIVER_VERSION}, got ({min_}, {max_})"
+                )
             middleware_class_list.append(middleware_class)
 
         context = PrivateContext(
@@ -639,7 +657,7 @@ async def download_to_local(
 ) -> pathlib.Path:
     file_ = pathlib.Path(path)
     if not file_.is_dir():
-        raise ValueError(f'{path} does not exist')
+        raise ValueError(f"{path} does not exist")
 
     # check if exists
     complete_path = file_.joinpath(node.name)
@@ -648,37 +666,38 @@ async def download_to_local(
 
     # exists but not a file
     if complete_path.exists():
-        raise DownloadError(f'{complete_path} exists but is not a file')
+        raise DownloadError(f"{complete_path} exists but is not a file")
 
     # if the file is empty, no need to download
     if node.size <= 0:
-        open(complete_path, 'w').close()
+        open(complete_path, "w").close()
         return complete_path
 
     # resume download
-    tmp_path = complete_path.parent.joinpath(f'{complete_path.name}.__tmp__')
+    tmp_path = complete_path.parent.joinpath(f"{complete_path.name}.__tmp__")
     if tmp_path.is_file():
         offset = tmp_path.stat().st_size
         if offset > node.size:
             raise DownloadError(
-                f'local file size of `{complete_path}` is greater then remote'
-                f' ({offset} > {node.size})')
+                f"local file size of `{complete_path}` is greater then remote"
+                f" ({offset} > {node.size})"
+            )
     elif tmp_path.exists():
-        raise DownloadError(f'{complete_path} exists but is not a file')
+        raise DownloadError(f"{complete_path} exists but is not a file")
     else:
         offset = 0
 
     if offset < node.size:
         async with await drive.download(node) as fin:
             await fin.seek(offset)
-            with open(tmp_path, 'ab') as fout:
+            with open(tmp_path, "ab") as fout:
                 while True:
                     try:
                         async for chunk in fin:
                             fout.write(chunk)
                         break
                     except Exception as e:
-                        EXCEPTION('wcpan.drive.core', e) << 'download'
+                        EXCEPTION("wcpan.drive.core", e) << "download"
 
                     offset = fout.tell()
                     await fin.seek(offset)
@@ -718,7 +737,7 @@ async def upload_from_local(
     # sanity check
     file_ = pathlib.Path(file_path).resolve()
     if not file_.is_file():
-        raise UploadError('invalid file path')
+        raise UploadError("invalid file path")
 
     file_name = file_.name
     total_file_size = file_.stat().st_size
@@ -738,7 +757,7 @@ async def upload_from_local(
         return e.node
 
     async with fout:
-        with open(file_path, 'rb') as fin:
+        with open(file_path, "rb") as fin:
             while True:
                 try:
                     await _upload_feed(fin, fout)
@@ -746,7 +765,7 @@ async def upload_from_local(
                 except UploadError as e:
                     raise
                 except Exception as e:
-                    EXCEPTION('wcpan.drive.core', e) << 'upload feed'
+                    EXCEPTION("wcpan.drive.core", e) << "upload feed"
 
                 await _upload_continue(fin, fout)
 

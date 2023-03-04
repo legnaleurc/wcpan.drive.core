@@ -17,7 +17,6 @@ from wcpan.drive.core.types import (
 
 
 class FakeMiddleware(Middleware):
-
     @classmethod
     def get_version_range(cls):
         return (3, 3)
@@ -42,13 +41,15 @@ class FakeMiddleware(Middleware):
     async def fetch_root_node(self) -> Node:
         return await self._driver.fetch_root_node()
 
-    async def fetch_changes(self,
+    async def fetch_changes(
+        self,
         check_point: str,
     ) -> AsyncGenerator[tuple[str, list[ChangeDict]], None]:
         async for check_point, changes in self._driver.fetch_changes(check_point):
             yield check_point, changes
 
-    async def create_folder(self,
+    async def create_folder(
+        self,
         parent_node: Node,
         folder_name: str,
         *,
@@ -62,7 +63,8 @@ class FakeMiddleware(Middleware):
             exist_ok=exist_ok,
         )
 
-    async def rename_node(self,
+    async def rename_node(
+        self,
         node: Node,
         *,
         new_parent: Optional[Node],
@@ -80,7 +82,8 @@ class FakeMiddleware(Middleware):
     async def download(self, node: Node) -> ReadableFile:
         return await self._driver.download(node=node)
 
-    async def upload(self,
+    async def upload(
+        self,
         parent_node: Node,
         file_name: str,
         *,
@@ -105,7 +108,7 @@ class FakeMiddleware(Middleware):
         return True
 
     async def get_oauth_url(self) -> str:
-        return ''
+        return ""
 
     async def set_oauth_token(self, token: str) -> None:
         pass

@@ -16,23 +16,24 @@ from .util import get_utc_now
 def test_factory(driver_class: str = None, middleware_list: list[str] = None):
     with TemporaryDirectory() as work_folder:
         work_path = pathlib.Path(work_folder)
-        config_path = work_path / 'config'
+        config_path = work_path / "config"
         config_path.mkdir()
-        data_path = work_path / 'data'
+        data_path = work_path / "data"
         data_path.mkdir()
 
         factory = DriveFactory()
         factory.config_path = config_path
         factory.data_path = data_path
-        factory.database = data_path / 'nodes.sqlite'
-        factory.driver = 'wcpan.drive.core.test.TestDriver' if driver_class is None else driver_class
+        factory.database = data_path / "nodes.sqlite"
+        factory.driver = (
+            "wcpan.drive.core.test.TestDriver" if driver_class is None else driver_class
+        )
         factory.middleware_list = [] if middleware_list is None else middleware_list
 
         yield factory
 
 
 class TestDriver(RemoteDriver):
-
     @classmethod
     def get_version_range(cls):
         return (3, 3)
@@ -71,7 +72,8 @@ class TestDriver(RemoteDriver):
         yield str(self.pseudo.check_point), self.pseudo.changes
         self.pseudo.consume()
 
-    async def create_folder(self,
+    async def create_folder(
+        self,
         parent_node: Node,
         folder_name: str,
         *,
@@ -86,7 +88,8 @@ class TestDriver(RemoteDriver):
 
         return folder
 
-    async def rename_node(self,
+    async def rename_node(
+        self,
         node: Node,
         *,
         new_parent: Optional[Node],
@@ -96,9 +99,9 @@ class TestDriver(RemoteDriver):
 
         dict_ = node.to_dict()
         if new_parent:
-            dict_['parent_list'] = [new_parent.id_]
+            dict_["parent_list"] = [new_parent.id_]
         if new_name:
-            dict_['name'] = new_name
+            dict_["name"] = new_name
 
         self.pseudo.update(dict_)
 
@@ -108,7 +111,7 @@ class TestDriver(RemoteDriver):
         await self.mock.trash_node(node)
 
         dict_ = node.to_dict()
-        dict_['trashed'] = True
+        dict_["trashed"] = True
 
         self.pseudo.update(dict_)
 
@@ -116,7 +119,8 @@ class TestDriver(RemoteDriver):
         await self.mock.download(node)
         return NodeReader(self._root, node)
 
-    async def upload(self,
+    async def upload(
+        self,
         parent_node: Node,
         file_name: str,
         *,
@@ -150,14 +154,13 @@ class TestDriver(RemoteDriver):
         return True
 
     async def get_oauth_url(self) -> str:
-        return ''
+        return ""
 
     async def set_oauth_token(self, token: str) -> None:
         pass
 
 
 class MockManager(object):
-
     def __init__(self):
         self.create_folder = AsyncMock()
         self.rename_node = AsyncMock()
@@ -167,7 +170,9 @@ class MockManager(object):
         self.get_hasher = AsyncMock()
 
     def reset_all_mocks(self, *, return_value: bool = False, side_effect: bool = False):
-        self.create_folder.reset_mock(return_value=return_value, side_effect=side_effect)
+        self.create_folder.reset_mock(
+            return_value=return_value, side_effect=side_effect
+        )
         self.rename_node.reset_mock(return_value=return_value, side_effect=side_effect)
         self.trash_node.reset_mock(return_value=return_value, side_effect=side_effect)
         self.download.reset_mock(return_value=return_value, side_effect=side_effect)
@@ -176,7 +181,6 @@ class MockManager(object):
 
 
 class PseudoManager(object):
-
     INITIAL_CHECK_POINT = 1
 
     def __init__(self):
@@ -187,23 +191,27 @@ class PseudoManager(object):
     def next_id(self) -> str:
         id_ = self._id
         self._id += 1
-        return f'__ID_{id_}__'
+        return f"__ID_{id_}__"
 
-    def build_node(self) -> 'NodeBuilder':
+    def build_node(self) -> "NodeBuilder":
         return NodeBuilder(self)
 
     def update(self, dict_: NodeDict) -> None:
-        self.changes.append({
-            'removed': False,
-            'node': dict_,
-        })
+        self.changes.append(
+            {
+                "removed": False,
+                "node": dict_,
+            }
+        )
         self.check_point += 1
 
     def delete(self, id_: str) -> None:
-        self.changes.append({
-            'removed': True,
-            'id': id_,
-        })
+        self.changes.append(
+            {
+                "removed": True,
+                "id": id_,
+            }
+        )
         self.check_point += 1
 
     def consume(self) -> None:
@@ -211,23 +219,22 @@ class PseudoManager(object):
 
 
 class NodeBuilder(object):
-
     def __init__(self, pseudo: PseudoManager):
         self.pseudo = pseudo
         self.dict: NodeDict = {
-            'id': '__ID_ROOT__',
-            'name': None,
-            'is_folder': True,
-            'trashed': False,
-            'created': get_utc_now().isoformat(),
-            'modified': get_utc_now().isoformat(),
-            'parent_list': [],
-            'size': None,
-            'mime_type': None,
-            'hash': None,
-            'image': None,
-            'video': None,
-            'private': None,
+            "id": "__ID_ROOT__",
+            "name": None,
+            "is_folder": True,
+            "trashed": False,
+            "created": get_utc_now().isoformat(),
+            "modified": get_utc_now().isoformat(),
+            "parent_list": [],
+            "size": None,
+            "mime_type": None,
+            "hash": None,
+            "image": None,
+            "video": None,
+            "private": None,
         }
 
     @property
@@ -235,34 +242,34 @@ class NodeBuilder(object):
         return Node.from_dict(self.dict)
 
     def to_trashed(self, trashed: bool = True):
-        self.dict['trashed'] = trashed
+        self.dict["trashed"] = trashed
         return self
 
     def to_folder(self, name: str, parent: Node):
-        self.dict['id'] = self.pseudo.next_id()
-        self.dict['name'] = name
-        self.dict['parent_list'] = [parent.id_]
+        self.dict["id"] = self.pseudo.next_id()
+        self.dict["name"] = name
+        self.dict["parent_list"] = [parent.id_]
         return self
 
     def to_file(self, size: int, hash_: str, mime_type: str):
-        self.dict['is_folder'] = False
-        self.dict['size'] = size
-        self.dict['hash'] = hash_
-        self.dict['mime_type'] = mime_type
+        self.dict["is_folder"] = False
+        self.dict["size"] = size
+        self.dict["hash"] = hash_
+        self.dict["mime_type"] = mime_type
         return self
 
     def to_image(self, width: int, height: int):
-        self.dict['image'] = {
-            'width': width,
-            'height': height,
+        self.dict["image"] = {
+            "width": width,
+            "height": height,
         }
         return self
 
     def to_video(self, width: int, height: int, ms_duration: int):
-        self.dict['video'] = {
-            'width': width,
-            'height': height,
-            'ms_duration': ms_duration,
+        self.dict["video"] = {
+            "width": width,
+            "height": height,
+            "ms_duration": ms_duration,
         }
         return self
 
@@ -272,7 +279,6 @@ class NodeBuilder(object):
 
 
 class NodeHasher(Hasher):
-
     def __init__(self):
         self._hasher = hashlib.md5()
 
@@ -296,7 +302,6 @@ class NodeHasher(Hasher):
 
 
 class NodeReader(ReadableFile):
-
     def __init__(self, root: pathlib.Path, node: Node):
         self._root = root
         self._node = node
@@ -306,7 +311,7 @@ class NodeReader(ReadableFile):
     async def __aenter__(self) -> ReadableFile:
         with contextlib.ExitStack() as stack:
             path = self._root / self._node.id_
-            self._fin = stack.enter_context(path.open('rb'))
+            self._fin = stack.enter_context(path.open("rb"))
             self._raii = stack.pop_all()
         return self
 
@@ -334,8 +339,8 @@ class NodeReader(ReadableFile):
 
 
 class NodeWriter(WritableFile):
-
-    def __init__(self,
+    def __init__(
+        self,
         root: pathlib.Path,
         pseudo: PseudoManager,
         parent_node: Node,
@@ -356,8 +361,8 @@ class NodeWriter(WritableFile):
     async def __aenter__(self) -> WritableFile:
         self._node = None
         with contextlib.ExitStack() as stack:
-            path = self._root / '_'
-            self._fout = stack.enter_context(path.open('wb'))
+            path = self._root / "_"
+            self._fout = stack.enter_context(path.open("wb"))
             self._raii = stack.pop_all()
         return self
 
@@ -367,10 +372,10 @@ class NodeWriter(WritableFile):
         self._raii.close()
         self._raii = None
 
-        path = self._root / '_'
+        path = self._root / "_"
         stat = path.stat()
         hasher = NodeHasher()
-        with path.open('rb') as fin:
+        with path.open("rb") as fin:
             while True:
                 chunk = fin.read(8092)
                 if not chunk:
@@ -385,7 +390,11 @@ class NodeWriter(WritableFile):
             if self._media_info.is_image:
                 builder.to_image(self._media_info.width, self._media_info.height)
             elif self._media_info.is_video:
-                builder.to_video(self._media_info.width, self._media_info.height, self._media_info.ms_duration)
+                builder.to_video(
+                    self._media_info.width,
+                    self._media_info.height,
+                    self._media_info.ms_duration,
+                )
         path.rename(self._root / builder.node.id_)
         self._node = builder.commit()
 

@@ -2,8 +2,15 @@ from __future__ import annotations
 
 
 __all__ = (
-    'ImageDict', 'VideoDict', 'PrivateDict', 'NodeDict', 'Node',
-    'RemoveChangeDict', 'UpdateChangeDict', 'ChangeDict', 'MediaInfo',
+    "ImageDict",
+    "VideoDict",
+    "PrivateDict",
+    "NodeDict",
+    "Node",
+    "RemoveChangeDict",
+    "UpdateChangeDict",
+    "ChangeDict",
+    "MediaInfo",
 )
 
 
@@ -17,13 +24,11 @@ PathOrString = Union[str, os.PathLike]
 
 
 class ImageDict(TypedDict):
-
     width: int
     height: int
 
 
 class VideoDict(TypedDict):
-
     width: int
     height: int
     ms_duration: int
@@ -33,7 +38,6 @@ PrivateDict = dict[str, str]
 
 
 class NodeDict(TypedDict):
-
     id: str
     name: str
     trashed: bool
@@ -50,26 +54,26 @@ class NodeDict(TypedDict):
 
 
 class Node(object):
-
     @staticmethod
-    def from_dict(dict_: NodeDict) -> 'Node':
+    def from_dict(dict_: NodeDict) -> "Node":
         return Node(
-            id_=dict_['id'],
-            name=dict_['name'],
-            trashed=bool(dict_['trashed']),
-            created=arrow.get(dict_['created']),
-            modified=arrow.get(dict_['modified']),
-            parent_list=dict_.get('parent_list', []),
-            is_folder=dict_['is_folder'],
-            mime_type=dict_['mime_type'],
-            hash_=dict_['hash'],
-            size=dict_['size'],
-            image=dict_['image'],
-            video=dict_['video'],
-            private=dict_.get('private', None),
+            id_=dict_["id"],
+            name=dict_["name"],
+            trashed=bool(dict_["trashed"]),
+            created=arrow.get(dict_["created"]),
+            modified=arrow.get(dict_["modified"]),
+            parent_list=dict_.get("parent_list", []),
+            is_folder=dict_["is_folder"],
+            mime_type=dict_["mime_type"],
+            hash_=dict_["hash"],
+            size=dict_["size"],
+            image=dict_["image"],
+            video=dict_["video"],
+            private=dict_.get("private", None),
         )
 
-    def __init__(self,
+    def __init__(
+        self,
         *,
         id_: str,
         name: str,
@@ -102,7 +106,7 @@ class Node(object):
     def __repr__(self):
         return f"Node(id='{self.id_}')"
 
-    def __eq__(self, that: 'Node') -> bool:
+    def __eq__(self, that: "Node") -> bool:
         if not isinstance(that, Node):
             return NotImplemented
         return self.id_ == that.id_
@@ -165,11 +169,11 @@ class Node(object):
 
     @property
     def image_width(self) -> Optional[int]:
-        return self._image['width'] if self.is_image else None
+        return self._image["width"] if self.is_image else None
 
     @property
     def image_height(self) -> Optional[int]:
-        return self._image['height'] if self.is_image else None
+        return self._image["height"] if self.is_image else None
 
     @property
     def is_video(self) -> bool:
@@ -177,21 +181,22 @@ class Node(object):
 
     @property
     def video_width(self) -> Optional[int]:
-        return self._video['width'] if self.is_video else None
+        return self._video["width"] if self.is_video else None
 
     @property
     def video_height(self) -> Optional[int]:
-        return self._video['height'] if self.is_video else None
+        return self._video["height"] if self.is_video else None
 
     @property
     def video_ms_duration(self) -> Optional[int]:
-        return self._video['ms_duration'] if self.is_video else None
+        return self._video["ms_duration"] if self.is_video else None
 
     @property
     def private(self) -> Optional[PrivateDict]:
         return self._private
 
-    def clone(self,
+    def clone(
+        self,
         *,
         name: str = None,
         trashed: bool = None,
@@ -205,7 +210,7 @@ class Node(object):
         image: ImageDict = None,
         video: VideoDict = None,
         private: PrivateDict = None,
-    ) -> 'Node':
+    ) -> "Node":
         return Node(
             id_=self.id_,
             name=self.name if name is None else name,
@@ -224,47 +229,45 @@ class Node(object):
 
     def to_dict(self) -> NodeDict:
         dict_ = {
-            'id': self.id_,
-            'name': self.name,
-            'trashed': self.trashed,
-            'is_folder': self.is_folder,
-            'created': self.created.isoformat(),
-            'modified': self.modified.isoformat(),
-            'parent_list': self.parent_list.copy(),
-            'mime_type': self.mime_type,
-            'hash': self.hash_,
-            'size': self.size,
+            "id": self.id_,
+            "name": self.name,
+            "trashed": self.trashed,
+            "is_folder": self.is_folder,
+            "created": self.created.isoformat(),
+            "modified": self.modified.isoformat(),
+            "parent_list": self.parent_list.copy(),
+            "mime_type": self.mime_type,
+            "hash": self.hash_,
+            "size": self.size,
         }
         if not self.is_image:
-            dict_['image'] = None
+            dict_["image"] = None
         else:
-            dict_['image'] = {
-                'width': self.image_width,
-                'height': self.image_height,
+            dict_["image"] = {
+                "width": self.image_width,
+                "height": self.image_height,
             }
         if not self.is_video:
-            dict_['video'] = None
+            dict_["video"] = None
         else:
-            dict_['video'] = {
-                'width': self.video_width,
-                'height': self.video_height,
-                'ms_duration': self.video_ms_duration,
+            dict_["video"] = {
+                "width": self.video_width,
+                "height": self.video_height,
+                "ms_duration": self.video_ms_duration,
             }
         if not self.private:
-            dict_['private'] = None
+            dict_["private"] = None
         else:
-            dict_['private'] = self.private.copy()
+            dict_["private"] = self.private.copy()
         return dict_
 
 
 class RemoveChangeDict(TypedDict):
-
     removed: Literal[True]
     id: str
 
 
 class UpdateChangeDict(TypedDict):
-
     removed: Literal[False]
     node: NodeDict
 
@@ -273,13 +276,12 @@ ChangeDict = Union[RemoveChangeDict, UpdateChangeDict]
 
 
 class MediaInfo(object):
-
     @staticmethod
-    def image(width: int, height: int) -> 'MediaInfo':
+    def image(width: int, height: int) -> "MediaInfo":
         return MediaInfo(is_image=True, width=width, height=height)
 
     @staticmethod
-    def video(width: int, height: int, ms_duration: int) -> 'MediaInfo':
+    def video(width: int, height: int, ms_duration: int) -> "MediaInfo":
         return MediaInfo(
             is_video=True,
             width=width,
@@ -287,7 +289,8 @@ class MediaInfo(object):
             ms_duration=ms_duration,
         )
 
-    def __init__(self,
+    def __init__(
+        self,
         *,
         is_image: bool = False,
         is_video: bool = False,
@@ -303,10 +306,10 @@ class MediaInfo(object):
 
     def __str__(self) -> str:
         if self.is_image:
-            return f'MediaInfo(is_image=True, width={self.width}, height={self.height})'
+            return f"MediaInfo(is_image=True, width={self.width}, height={self.height})"
         if self.is_video:
-            return f'MediaInfo(is_video=True, width={self.width}, height={self.height}, ms_duration={self.ms_duration})'
-        return 'MediaInfo()'
+            return f"MediaInfo(is_video=True, width={self.width}, height={self.height}, ms_duration={self.ms_duration})"
+        return "MediaInfo()"
 
     @property
     def is_image(self) -> bool:
@@ -330,8 +333,8 @@ class MediaInfo(object):
 
 
 class ReadOnlyContext(object):
-
-    def __init__(self,
+    def __init__(
+        self,
         *,
         config_path: os.PathLike,
         data_path: os.PathLike,
