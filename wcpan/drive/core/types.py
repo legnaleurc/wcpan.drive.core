@@ -14,13 +14,13 @@ __all__ = (
 )
 
 
-from typing import TypedDict, Literal
+from typing import TypeAlias, TypedDict, Literal
 import os
 
 import arrow
 
 
-PathOrString = str | os.PathLike
+PathOrString: TypeAlias = str | os.PathLike
 
 
 class ImageDict(TypedDict):
@@ -34,7 +34,7 @@ class VideoDict(TypedDict):
     ms_duration: int
 
 
-PrivateDict = dict[str, str]
+PrivateDict: TypeAlias = dict[str, str]
 
 
 class NodeDict(TypedDict):
@@ -272,7 +272,7 @@ class UpdateChangeDict(TypedDict):
     node: NodeDict
 
 
-ChangeDict = RemoveChangeDict | UpdateChangeDict
+ChangeDict: TypeAlias = RemoveChangeDict | UpdateChangeDict
 
 
 class MediaInfo(object):

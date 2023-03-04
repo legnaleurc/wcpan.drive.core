@@ -15,6 +15,7 @@ from typing import (
     AsyncGenerator,
     AsyncIterator,
     Type,
+    TypeAlias,
 )
 from types import TracebackType
 
@@ -333,4 +334,4 @@ class RemoteDriver(metaclass=ABCMeta):
         """
 
 
-Middleware = RemoteDriver
+Middleware: TypeAlias = RemoteDriver
