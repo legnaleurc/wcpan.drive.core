@@ -1,4 +1,4 @@
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator
 
 from wcpan.drive.core.abc import (
     Hasher,

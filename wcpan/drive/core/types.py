@@ -55,7 +55,7 @@ class NodeDict(TypedDict):
 
 class Node(object):
     @staticmethod
-    def from_dict(dict_: NodeDict) -> "Node":
+    def from_dict(dict_: NodeDict) -> Node:
         return Node(
             id_=dict_["id"],
             name=dict_["name"],
@@ -106,7 +106,7 @@ class Node(object):
     def __repr__(self):
         return f"Node(id='{self.id_}')"
 
-    def __eq__(self, that: "Node") -> bool:
+    def __eq__(self, that: Node) -> bool:
         if not isinstance(that, Node):
             return NotImplemented
         return self.id_ == that.id_
@@ -210,7 +210,7 @@ class Node(object):
         image: ImageDict = None,
         video: VideoDict = None,
         private: PrivateDict = None,
-    ) -> "Node":
+    ) -> Node:
         return Node(
             id_=self.id_,
             name=self.name if name is None else name,

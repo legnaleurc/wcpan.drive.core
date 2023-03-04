@@ -11,13 +11,13 @@ __all__ = (
     "get_utc_now",
 )
 
+from concurrent.futures import Executor, ProcessPoolExecutor
+from pathlib import Path, PurePath
 from typing import TypedDict
-import concurrent.futures
 import datetime
 import importlib
 import mimetypes
 import multiprocessing
-import pathlib
 import signal
 
 from .types import PathOrString
@@ -39,25 +39,25 @@ def get_default_configuration() -> ConfigurationDict:
     }
 
 
-def get_default_config_path() -> pathlib.Path:
-    path = pathlib.Path("~/.config")
+def get_default_config_path() -> Path:
+    path = Path("~/.config")
     path = path.expanduser()
     path = path / "wcpan.drive"
     return path
 
 
-def get_default_data_path() -> pathlib.Path:
-    path = pathlib.Path("~/.local/share")
+def get_default_data_path() -> Path:
+    path = Path("~/.local/share")
     path = path.expanduser()
     path = path / "wcpan.drive"
     return path
 
 
-def create_executor() -> concurrent.futures.Executor:
+def create_executor() -> Executor:
     if multiprocessing.get_start_method() == "spawn":
-        return concurrent.futures.ProcessPoolExecutor(initializer=initialize_worker)
+        return ProcessPoolExecutor(initializer=initialize_worker)
     else:
-        return concurrent.futures.ProcessPoolExecutor()
+        return ProcessPoolExecutor()
 
 
 def initialize_worker() -> None:
@@ -65,9 +65,9 @@ def initialize_worker() -> None:
 
 
 def resolve_path(
-    from_: pathlib.PurePath,
-    to: pathlib.PurePath,
-) -> pathlib.PurePath:
+    from_: PurePath,
+    to: PurePath,
+) -> PurePath:
     rv = from_
     for part in to.parts:
         if part == ".":
@@ -79,7 +79,7 @@ def resolve_path(
     return rv
 
 
-def normalize_path(path: pathlib.PurePath) -> pathlib.PurePath:
+def normalize_path(path: PurePath) -> PurePath:
     if not path.is_absolute():
         raise ValueError("only accepts absolute path")
     rv = []
@@ -90,7 +90,7 @@ def normalize_path(path: pathlib.PurePath) -> pathlib.PurePath:
             rv.pop()
         else:
             rv.append(part)
-    return pathlib.PurePath(*rv)
+    return PurePath(*rv)
 
 
 def import_class(class_path: str) -> type:
@@ -110,7 +110,7 @@ def get_mime_type(path: PathOrString) -> str:
 def is_valid_name(name: str) -> bool:
     if name.find("\\") >= 0:
         return False
-    path = pathlib.Path(name)
+    path = Path(name)
     return path.name == name
 
 

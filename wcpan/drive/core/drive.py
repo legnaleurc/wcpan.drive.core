@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __all__ = (
     "Drive",
     "DriveFactory",
@@ -9,13 +12,13 @@ __all__ = (
 )
 
 
+from concurrent.futures import Executor
+from pathlib import Path, PurePath
 from typing import AsyncGenerator, BinaryIO
 import asyncio
-import concurrent.futures
 import contextlib
 import functools
 import os
-import pathlib
 
 from wcpan.logger import EXCEPTION
 import yaml
@@ -61,12 +64,12 @@ _CHUNK_SIZE = 64 * 1024
 class PrivateContext(object):
     def __init__(
         self,
-        config_path: pathlib.Path,
-        data_path: pathlib.Path,
+        config_path: Path,
+        data_path: Path,
         database_dsn: str,
         driver_class: type[RemoteDriver],
         middleware_class_list: list[type[Middleware]],
-        pool: concurrent.futures.Executor | None,
+        pool: Executor | None,
     ) -> None:
         self._context = ReadOnlyContext(
             config_path=config_path,
@@ -82,7 +85,7 @@ class PrivateContext(object):
         return self._database_dsn
 
     @property
-    def pool(self) -> concurrent.futures.Executor | None:
+    def pool(self) -> Executor | None:
         return self._pool
 
     def create_remote_driver(self) -> RemoteDriver:
@@ -115,7 +118,7 @@ class Drive(object):
 
         self._raii = None
 
-    async def __aenter__(self) -> "Drive":
+    async def __aenter__(self) -> Drive:
         async with contextlib.AsyncExitStack() as stack:
             if not self._context.pool:
                 self._pool = stack.enter_context(create_executor())
@@ -154,11 +157,11 @@ class Drive(object):
 
     async def get_node_by_path(self, path: PathOrString) -> Node | None:
         """Get node by absolute path."""
-        path = pathlib.PurePath(path)
+        path = PurePath(path)
         path = normalize_path(path)
         return await self._db.get_node_by_path(path)
 
-    async def get_path(self, node: Node) -> pathlib.PurePath | None:
+    async def get_path(self, node: Node) -> PurePath | None:
         """Get absolute path of the node."""
         return await self._db.get_path_by_id(node.id_)
 
@@ -466,8 +469,8 @@ class Drive(object):
 
         src_path = str(src_path)
         dst_path = str(dst_path)
-        src = pathlib.PurePath(src_path)
-        dst = pathlib.PurePath(dst_path)
+        src = PurePath(src_path)
+        dst = PurePath(dst_path)
 
         # case 1 - move to a relative path
         if not dst.is_absolute():
@@ -482,7 +485,7 @@ class Drive(object):
                 # case 1.1.3 - move to parent folder, the same as case 1.2
 
             # case 1.2 - a relative path, resolve to absolute path
-            # NOTE pathlib.PurePath does not implement normalizing algorithm
+            # NOTE PurePath does not implement normalizing algorithm
             dst = resolve_path(src.parent, dst)
 
         # case 2 - move to an absolute path
@@ -567,22 +570,22 @@ class DriveFactory(object):
         self.middleware_list = []
 
     @property
-    def config_path(self) -> pathlib.Path:
+    def config_path(self) -> Path:
         """The path which contains config files."""
         return self._config_path
 
     @config_path.setter
     def config_path(self, path: PathOrString) -> None:
-        self._config_path = pathlib.Path(path)
+        self._config_path = Path(path)
 
     @property
-    def data_path(self) -> pathlib.Path:
+    def data_path(self) -> Path:
         """The path which contains data files."""
         return self._data_path
 
     @data_path.setter
     def data_path(self, path: PathOrString) -> None:
-        self._data_path = pathlib.Path(path)
+        self._data_path = Path(path)
 
     def load_config(self) -> None:
         """The path which contains data files."""
@@ -602,13 +605,13 @@ class DriveFactory(object):
         self.driver = config_dict["driver"]
         self.middleware_list = config_dict["middleware"]
 
-    def __call__(self, pool: concurrent.futures.Executor = None) -> Drive:
+    def __call__(self, pool: Executor = None) -> Drive:
         # ensure we can access the folders
         self.config_path.mkdir(parents=True, exist_ok=True)
         self.data_path.mkdir(parents=True, exist_ok=True)
 
         # TODO use real dsn
-        path = pathlib.Path(self.database)
+        path = Path(self.database)
         if not path.is_absolute():
             path = self.data_path / path
         dsn = str(path)
@@ -645,7 +648,7 @@ async def download_to_local_by_id(
     drive: Drive,
     node_id: str,
     path: PathOrString,
-) -> pathlib.Path:
+) -> Path:
     node = await drive.get_node_by_id(node_id)
     return await download_to_local(drive, node, path)
 
@@ -654,8 +657,8 @@ async def download_to_local(
     drive: Drive,
     node: Node,
     path: PathOrString,
-) -> pathlib.Path:
-    file_ = pathlib.Path(path)
+) -> Path:
+    file_ = Path(path)
     if not file_.is_dir():
         raise ValueError(f"{path} does not exist")
 
@@ -735,7 +738,7 @@ async def upload_from_local(
     exist_ok: bool = False,
 ) -> Node:
     # sanity check
-    file_ = pathlib.Path(file_path).resolve()
+    file_ = Path(file_path).resolve()
     if not file_.is_file():
         raise UploadError("invalid file path")
 

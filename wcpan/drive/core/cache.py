@@ -1,8 +1,8 @@
+from concurrent.futures import Executor
+from pathlib import PurePath
 from typing import Pattern
 import asyncio
-import concurrent.futures
 import functools
-import pathlib
 import re
 import sqlite3
 
@@ -90,7 +90,7 @@ CURRENT_SCHEMA_VERSION = 4
 
 
 class Cache(object):
-    def __init__(self, dsn: str, pool: concurrent.futures.Executor) -> None:
+    def __init__(self, dsn: str, pool: Executor) -> None:
         self._dsn = dsn
         self._pool = pool
         self._raii = None
@@ -121,13 +121,13 @@ class Cache(object):
     async def get_node_by_id(self, node_id: str) -> Node | None:
         return await self._bg(get_node_by_id, node_id)
 
-    async def get_node_by_path(self, path: pathlib.PurePath) -> Node | None:
+    async def get_node_by_path(self, path: PurePath) -> Node | None:
         try:
             return await self._bg(get_node_by_path, path)
         except KeyError:
             raise CacheError("invalid cache")
 
-    async def get_path_by_id(self, node_id: str) -> pathlib.PurePath | None:
+    async def get_path_by_id(self, node_id: str) -> PurePath | None:
         return await self._bg(get_path_by_id, node_id)
 
     async def get_node_by_name_from_parent_id(
@@ -255,7 +255,7 @@ def get_node_by_id(dsn: str, node_id: str) -> Node | None:
 
 def get_node_by_path(
     dsn: str,
-    path: pathlib.PurePath,
+    path: PurePath,
 ) -> Node | None:
     parts = path.parts[1:]
     with Database(dsn) as db, ReadOnly(db) as query:
@@ -280,7 +280,7 @@ def get_node_by_path(
     return node
 
 
-def get_path_by_id(dsn: str, node_id: str) -> pathlib.PurePath | None:
+def get_path_by_id(dsn: str, node_id: str) -> PurePath | None:
     parts = []
     with Database(dsn) as db, ReadOnly(db) as query:
         while True:
@@ -316,7 +316,7 @@ def get_path_by_id(dsn: str, node_id: str) -> pathlib.PurePath | None:
                 break
             node_id = rv["parent"]
 
-    path = pathlib.PurePath(*parts)
+    path = PurePath(*parts)
     return path
 
 
