@@ -1,5 +1,5 @@
-PYTHON := poetry run python3
-BLACK := poetry run black
+PYTHON := poetry run -- python3
+BLACK := poetry run -- black
 
 PKG_FILES := pyproject.toml poetry.lock
 PKG_DIR := .venv
