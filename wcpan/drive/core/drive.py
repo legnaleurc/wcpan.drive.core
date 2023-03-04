@@ -193,7 +193,7 @@ class Drive(object):
         """Get the child node list of given node id."""
         return await self._db.get_children_by_id(node_id)
 
-    async def get_trashed_nodes(self, flatten: bool = False) -> list[Node]:
+    async def get_trashed_nodes(self, flatten: bool | None = False) -> list[Node]:
         """Get trashed node list."""
         rv = await self._db.get_trashed_nodes()
         if flatten:
@@ -232,7 +232,7 @@ class Drive(object):
     async def walk(
         self,
         node: Node,
-        include_trashed: bool = False,
+        include_trashed: bool | None = False,
     ) -> AsyncGenerator[tuple[Node, list[Node], list[Node]], None]:
         """Traverse nodes from given node."""
         if not node.is_folder:
@@ -262,7 +262,7 @@ class Drive(object):
         self,
         parent_node: Node,
         folder_name: str,
-        exist_ok: bool = False,
+        exist_ok: bool | None = False,
     ) -> Node:
         """Create a folder."""
         # sanity check
@@ -318,9 +318,9 @@ class Drive(object):
         parent_id: str,
         file_name: str,
         *,
-        file_size: int = None,
-        mime_type: str = None,
-        media_info: MediaInfo = None,
+        file_size: int | None = None,
+        mime_type: str | None = None,
+        media_info: MediaInfo | None = None,
     ) -> WritableFile:
         """Upload file."""
         parent_node = await self.get_node_by_id(parent_id)
@@ -337,9 +337,9 @@ class Drive(object):
         parent_node: Node,
         file_name: str,
         *,
-        file_size: int = None,
-        mime_type: str = None,
-        media_info: MediaInfo = None,
+        file_size: int | None = None,
+        mime_type: str | None = None,
+        media_info: MediaInfo | None = None,
     ) -> WritableFile:
         """Upload file."""
         # sanity check
@@ -392,8 +392,8 @@ class Drive(object):
     async def rename_node(
         self,
         node: Node,
-        new_parent: Node = None,
-        new_name: str = None,
+        new_parent: Node | None = None,
+        new_name: str | None = None,
     ) -> Node:
         """Move or rename the node."""
         # sanity check
@@ -437,8 +437,8 @@ class Drive(object):
     async def rename_node_by_id(
         self,
         node_id: str,
-        new_parent_id: str = None,
-        new_name: str = None,
+        new_parent_id: str | None = None,
+        new_name: str | None = None,
     ) -> Node:
         """Move or rename the node."""
         node = await self.get_node_by_id(node_id)
@@ -506,7 +506,7 @@ class Drive(object):
 
     async def sync(
         self,
-        check_point: str = None,
+        check_point: str | None = None,
     ) -> AsyncGenerator[ChangeDict, None]:
         """Synchronize the local node cache.
 
