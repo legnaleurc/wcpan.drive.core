@@ -9,7 +9,7 @@ __all__ = (
 )
 
 
-from typing import AsyncGenerator, Type, BinaryIO
+from typing import AsyncGenerator, BinaryIO
 import asyncio
 import concurrent.futures
 import contextlib
@@ -64,8 +64,8 @@ class PrivateContext(object):
         config_path: pathlib.Path,
         data_path: pathlib.Path,
         database_dsn: str,
-        driver_class: Type[RemoteDriver],
-        middleware_class_list: list[Type[Middleware]],
+        driver_class: type[RemoteDriver],
+        middleware_class_list: list[type[Middleware]],
         pool: concurrent.futures.Executor | None,
     ) -> None:
         self._context = ReadOnlyContext(

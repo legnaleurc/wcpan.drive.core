@@ -11,7 +11,7 @@ __all__ = (
     "get_utc_now",
 )
 
-from typing import TypedDict, Type
+from typing import TypedDict
 import concurrent.futures
 import datetime
 import importlib
@@ -93,7 +93,7 @@ def normalize_path(path: pathlib.PurePath) -> pathlib.PurePath:
     return pathlib.PurePath(*rv)
 
 
-def import_class(class_path: str) -> Type:
+def import_class(class_path: str) -> type:
     module_path, class_name = class_path.rsplit(".", 1)
     module = importlib.import_module(module_path)
     class_ = getattr(module, class_name)

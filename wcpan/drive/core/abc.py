@@ -14,7 +14,6 @@ from abc import ABCMeta, abstractmethod
 from typing import (
     AsyncGenerator,
     AsyncIterator,
-    Type,
     TypeAlias,
 )
 from types import TracebackType
@@ -52,7 +51,7 @@ class ReadableFile(metaclass=ABCMeta):
     @abstractmethod
     async def __aexit__(
         self,
-        et: Type[BaseException] | None,
+        et: type[BaseException] | None,
         ev: BaseException | None,
         tb: TracebackType | None,
     ) -> bool:
@@ -129,7 +128,7 @@ class WritableFile(metaclass=ABCMeta):
     @abstractmethod
     async def __aexit__(
         self,
-        et: Type[BaseException] | None,
+        et: type[BaseException] | None,
         ev: BaseException | None,
         tb: TracebackType | None,
     ) -> bool:
@@ -191,7 +190,7 @@ class RemoteDriver(metaclass=ABCMeta):
     @abstractmethod
     async def __aexit__(
         self,
-        et: Type[BaseException] | None,
+        et: type[BaseException] | None,
         ev: BaseException | None,
         tb: TracebackType | None,
     ) -> bool:
