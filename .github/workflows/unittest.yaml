@@ -24,4 +24,5 @@ jobs:
         uses: snok/install-poetry@v1
       - name: Run tests
         run: |
+          make lint
           make test
