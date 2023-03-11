@@ -13,7 +13,9 @@ from .util import get_utc_now
 
 
 @contextlib.contextmanager
-def test_factory(driver_class: str = None, middleware_list: list[str] = None):
+def test_factory(
+    driver_class: str | None = None, middleware_list: list[str] | None = None
+):
     with TemporaryDirectory() as work_folder:
         work_path = pathlib.Path(work_folder)
         config_path = work_path / "config"
@@ -42,7 +44,7 @@ class TestDriver(RemoteDriver):
         self.mock = MockManager()
         self.pseudo = PseudoManager()
         self._context = context
-        self._root: pathlib.Path = None
+        self._root: pathlib.Path | None = None
         self._raii = None
 
     async def __aenter__(self) -> RemoteDriver:
@@ -52,7 +54,8 @@ class TestDriver(RemoteDriver):
             self._raii = stack.pop_all()
         return self
 
-    async def __aexit__(self, et, ev, tb) -> bool:
+    async def __aexit__(self, et, ev, tb) -> None:
+        assert self._raii
         self._root = None
         self._raii.close()
         self._raii = None
@@ -116,6 +119,7 @@ class TestDriver(RemoteDriver):
         self.pseudo.update(dict_)
 
     async def download(self, node: Node) -> ReadableFile:
+        assert self._root
         await self.mock.download(node)
         return NodeReader(self._root, node)
 
@@ -129,6 +133,7 @@ class TestDriver(RemoteDriver):
         media_info: MediaInfo | None,
         private: PrivateDict | None,
     ) -> WritableFile:
+        assert self._root
         await self.mock.upload(
             parent_node,
             file_name,
@@ -315,12 +320,14 @@ class NodeReader(ReadableFile):
             self._raii = stack.pop_all()
         return self
 
-    async def __aexit__(self, type_, exc, tb) -> bool:
+    async def __aexit__(self, type_, exc, tb) -> None:
+        assert self._raii
         self._fin = None
         self._raii.close()
         self._raii = None
 
     async def __aiter__(self) -> AsyncIterator[bytes]:
+        assert self._fin
         while True:
             chunk = self._fin.read(8192)
             if not chunk:
@@ -328,9 +335,11 @@ class NodeReader(ReadableFile):
             yield chunk
 
     async def read(self, length: int) -> bytes:
+        assert self._fin
         return self._fin.read(length)
 
     async def seek(self, offset: int) -> None:
+        assert self._fin
         self._fin.flush()
         self._fin.seek(offset, os.SEEK_SET)
 
@@ -366,7 +375,10 @@ class NodeWriter(WritableFile):
             self._raii = stack.pop_all()
         return self
 
-    async def __aexit__(self, type_, exc, tb) -> bool:
+    async def __aexit__(self, type_, exc, tb) -> None:
+        assert self._fout
+        assert self._raii
+        assert self._mime_type
         self._fout.flush()
         self._fout = None
         self._raii.close()
@@ -399,13 +411,16 @@ class NodeWriter(WritableFile):
         self._node = builder.commit()
 
     async def tell(self) -> int:
+        assert self._fout
         return self._fout.tell()
 
     async def seek(self, offset: int) -> None:
+        assert self._fout
         self._fout.flush()
         self._fout.seek(offset, os.SEEK_SET)
 
     async def write(self, chunk: bytes) -> int:
+        assert self._fout
         return self._fout.write(chunk)
 
     async def node(self) -> Node | None:

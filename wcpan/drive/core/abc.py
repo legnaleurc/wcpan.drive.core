@@ -1,6 +1,3 @@
-from __future__ import annotations
-
-
 __all__ = (
     "ReadableFile",
     "Hasher",
@@ -14,6 +11,7 @@ from abc import ABCMeta, abstractmethod
 from typing import (
     AsyncGenerator,
     AsyncIterator,
+    Self,
     TypeAlias,
 )
 from types import TracebackType
@@ -45,7 +43,7 @@ class ReadableFile(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    async def __aenter__(self) -> ReadableFile:
+    async def __aenter__(self) -> Self:
         ...
 
     @abstractmethod
@@ -102,7 +100,7 @@ class Hasher(metaclass=ABCMeta):
         """
 
     @abstractmethod
-    def copy(self) -> Hasher:
+    def copy(self) -> Self:
         """
         Return a copy to self. Does not require clone the state.
         """
@@ -122,7 +120,7 @@ class WritableFile(metaclass=ABCMeta):
     """
 
     @abstractmethod
-    async def __aenter__(self) -> WritableFile:
+    async def __aenter__(self) -> Self:
         ...
 
     @abstractmethod
@@ -178,13 +176,13 @@ class RemoteDriver(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def remote(self) -> RemoteDriver | None:
+    def remote(self) -> Self | None:
         """
         Get the decorated remote driver, if any.
         """
 
     @abstractmethod
-    async def __aenter__(self) -> RemoteDriver:
+    async def __aenter__(self) -> Self:
         ...
 
     @abstractmethod

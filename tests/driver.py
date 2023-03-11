@@ -1,3 +1,4 @@
+from contextlib import AsyncExitStack
 from typing import AsyncGenerator
 
 from wcpan.drive.core.abc import (
@@ -24,12 +25,17 @@ class FakeMiddleware(Middleware):
     def __init__(self, context: ReadOnlyContext, driver: RemoteDriver) -> None:
         self._context = context
         self._driver = driver
+        self._raii = None
 
     async def __aenter__(self) -> Middleware:
+        async with AsyncExitStack() as stack:
+            await stack.enter_async_context(self._driver)
+            self._raii = stack.pop_all()
         return self
 
-    async def __aexit__(self, et, ev, tb) -> bool:
-        pass
+    async def __aexit__(self, et, ev, tb) -> None:
+        assert self._raii
+        await self._raii.aclose()
 
     @property
     def remote(self):

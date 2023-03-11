@@ -1,6 +1,3 @@
-from __future__ import annotations
-
-
 __all__ = (
     "Drive",
     "DriveFactory",
@@ -13,14 +10,14 @@ __all__ = (
 
 
 from concurrent.futures import Executor
+from logging import getLogger
 from pathlib import Path, PurePath
-from typing import AsyncGenerator, BinaryIO
+from typing import AsyncGenerator, BinaryIO, Self
 import asyncio
 import contextlib
 import functools
 import os
 
-from wcpan.logger import EXCEPTION
 import yaml
 
 from .abc import ReadableFile, WritableFile, Hasher, RemoteDriver, Middleware
@@ -118,7 +115,7 @@ class Drive(object):
 
         self._raii = None
 
-    async def __aenter__(self) -> Drive:
+    async def __aenter__(self) -> Self:
         async with contextlib.AsyncExitStack() as stack:
             if not self._context.pool:
                 self._pool = stack.enter_context(create_executor())
@@ -136,6 +133,7 @@ class Drive(object):
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
+        assert self._raii
         await self._raii.aclose()
         self._remote = None
         self._pool = None
@@ -145,56 +143,67 @@ class Drive(object):
     @property
     def remote(self) -> RemoteDriver:
         """Get the remote driver"""
+        assert self._remote
         return self._remote
 
     async def get_root_node(self) -> Node:
         """Get the root node."""
+        assert self._db
         return await self._db.get_root_node()
 
-    async def get_node_by_id(self, node_id: str) -> Node:
+    async def get_node_by_id(self, node_id: str) -> Node | None:
         """Get node by node id."""
+        assert self._db
         return await self._db.get_node_by_id(node_id)
 
     async def get_node_by_path(self, path: PathOrString) -> Node | None:
         """Get node by absolute path."""
+        assert self._db
         path = PurePath(path)
         path = normalize_path(path)
         return await self._db.get_node_by_path(path)
 
     async def get_path(self, node: Node) -> PurePath | None:
         """Get absolute path of the node."""
+        assert self._db
         return await self._db.get_path_by_id(node.id_)
 
-    async def get_path_by_id(self, node_id: str) -> str:
+    async def get_path_by_id(self, node_id: str) -> PurePath | None:
         """Get absolute path of the node id."""
+        assert self._db
         return await self._db.get_path_by_id(node_id)
 
     async def get_node_by_name_from_parent_id(
         self,
         name: str,
         parent_id: str,
-    ) -> Node:
+    ) -> Node | None:
         """Get node by given name and parent id."""
+        assert self._db
         return await self._db.get_node_by_name_from_parent_id(name, parent_id)
 
     async def get_node_by_name_from_parent(
         self,
         name: str,
         parent: Node,
-    ) -> Node:
+    ) -> Node | None:
         """Get node by given name and parent node."""
+        assert self._db
         return await self._db.get_node_by_name_from_parent_id(name, parent.id_)
 
     async def get_children(self, node: Node) -> list[Node]:
         """Get the child node list of given node."""
+        assert self._db
         return await self._db.get_children_by_id(node.id_)
 
     async def get_children_by_id(self, node_id: str) -> list[Node]:
         """Get the child node list of given node id."""
+        assert self._db
         return await self._db.get_children_by_id(node_id)
 
     async def get_trashed_nodes(self, flatten: bool | None = False) -> list[Node]:
         """Get trashed node list."""
+        assert self._db
         rv = await self._db.get_trashed_nodes()
         if flatten:
             return rv
@@ -215,18 +224,22 @@ class Drive(object):
 
         `begin` and `end` are UTC timestamps in second.
         """
+        assert self._db
         return await self._db.get_uploaded_size(begin, end)
 
     async def find_nodes_by_regex(self, pattern: str) -> list[Node]:
         """Find nodes by name."""
+        assert self._db
         return await self._db.find_nodes_by_regex(pattern)
 
     async def find_orphan_nodes(self) -> list[Node]:
         """Find nodes which are dangling from root."""
+        assert self._db
         return await self._db.find_orphan_nodes()
 
     async def find_multiple_parents_nodes(self) -> list[Node]:
         """Find nodes which have two or more parents."""
+        assert self._db
         return await self._db.find_multiple_parents_nodes()
 
     async def walk(
@@ -291,12 +304,14 @@ class Drive(object):
             parent_node=parent_node,
             folder_name=folder_name,
             private=None,
-            exist_ok=exist_ok,
+            exist_ok=exist_ok or False,
         )
 
     async def download_by_id(self, node_id: str) -> ReadableFile:
         """Download the node."""
         node = await self.get_node_by_id(node_id)
+        if not node:
+            raise TypeError("node is none")
         return await self.download(node)
 
     async def download(self, node: Node) -> ReadableFile:
@@ -324,6 +339,8 @@ class Drive(object):
     ) -> WritableFile:
         """Upload file."""
         parent_node = await self.get_node_by_id(parent_id)
+        if not parent_node:
+            raise TypeError("invalid parent node")
         return await self.upload(
             parent_node,
             file_name,
@@ -372,6 +389,8 @@ class Drive(object):
     async def trash_node_by_id(self, node_id: str) -> None:
         """Move the node to trash."""
         node = await self.get_node_by_id(node_id)
+        if not node:
+            raise TypeError("invalid node")
         await self.trash_node(node)
 
     async def trash_node(self, node: Node) -> None:
@@ -426,7 +445,10 @@ class Drive(object):
                     raise LineageError("new_parent is a descendant of node")
                 if not ancestor.parent_id:
                     break
-                ancestor = await self.get_node_by_id(ancestor.parent_id)
+                p = await self.get_node_by_id(ancestor.parent_id)
+                if not p:
+                    break
+                ancestor = p
 
         return await self._remote.rename_node(
             node=node,
@@ -442,7 +464,12 @@ class Drive(object):
     ) -> Node:
         """Move or rename the node."""
         node = await self.get_node_by_id(node_id)
-        new_parent = await self.get_node_by_id(new_parent_id)
+        if not node:
+            raise TypeError("source node is none")
+        if not new_parent_id:
+            new_parent = None
+        else:
+            new_parent = await self.get_node_by_id(new_parent_id)
         return await self.rename_node(node, new_parent, new_name)
 
     async def rename_node_by_path(
@@ -465,7 +492,7 @@ class Drive(object):
         """
         node = await self.get_node_by_path(src_path)
         if not node:
-            raise NodeNotFoundError(src_path)
+            raise NodeNotFoundError(str(src_path))
 
         src_path = str(src_path)
         dst_path = str(dst_path)
@@ -512,6 +539,7 @@ class Drive(object):
 
         This is the ONLY function which will modify the local cache.
         """
+        assert self._db
         if not self._remote:
             raise InvalidRemoteDriverError()
         if not await self.is_authorized():
@@ -605,7 +633,10 @@ class DriveFactory(object):
         self.driver = config_dict["driver"]
         self.middleware_list = config_dict["middleware"]
 
-    def __call__(self, pool: Executor = None) -> Drive:
+    def __call__(self, pool: Executor | None = None) -> Drive:
+        if not self.database or not self.driver:
+            raise ValueError(f"invalid configuration")
+
         # ensure we can access the folders
         self.config_path.mkdir(parents=True, exist_ok=True)
         self.data_path.mkdir(parents=True, exist_ok=True)
@@ -650,6 +681,8 @@ async def download_to_local_by_id(
     path: PathOrString,
 ) -> Path:
     node = await drive.get_node_by_id(node_id)
+    if not node:
+        raise DownloadError(f"invalid node")
     return await download_to_local(drive, node, path)
 
 
@@ -658,6 +691,9 @@ async def download_to_local(
     node: Node,
     path: PathOrString,
 ) -> Path:
+    if node.size is None:
+        raise DownloadError(f"invalid node")
+
     file_ = Path(path)
     if not file_.is_dir():
         raise ValueError(f"{path} does not exist")
@@ -699,8 +735,8 @@ async def download_to_local(
                         async for chunk in fin:
                             fout.write(chunk)
                         break
-                    except Exception as e:
-                        EXCEPTION("wcpan.drive.core", e) << "download"
+                    except Exception:
+                        getLogger(__name__).exception("download feed")
 
                     offset = fout.tell()
                     await fin.seek(offset)
@@ -718,8 +754,10 @@ async def upload_from_local_by_id(
     media_info: MediaInfo | None,
     *,
     exist_ok: bool = False,
-) -> Node:
+) -> Node | None:
     node = await drive.get_node_by_id(parent_id)
+    if not node:
+        raise UploadError("invalid node")
     return await upload_from_local(
         drive,
         node,
@@ -736,7 +774,7 @@ async def upload_from_local(
     media_info: MediaInfo | None,
     *,
     exist_ok: bool = False,
-) -> Node:
+) -> Node | None:
     # sanity check
     file_ = Path(file_path).resolve()
     if not file_.is_file():
@@ -767,8 +805,8 @@ async def upload_from_local(
                     break
                 except UploadError as e:
                     raise
-                except Exception as e:
-                    EXCEPTION("wcpan.drive.core", e) << "upload feed"
+                except Exception:
+                    getLogger(__name__).exception("upload feed")
 
                 await _upload_continue(fin, fout)
 
@@ -776,7 +814,7 @@ async def upload_from_local(
     return node
 
 
-async def _upload_feed(fin: BinaryIO, fout: BinaryIO) -> None:
+async def _upload_feed(fin: BinaryIO, fout: WritableFile) -> None:
     while True:
         chunk = fin.read(_CHUNK_SIZE)
         if not chunk:
@@ -784,7 +822,7 @@ async def _upload_feed(fin: BinaryIO, fout: BinaryIO) -> None:
         await fout.write(chunk)
 
 
-async def _upload_continue(fin: BinaryIO, fout: BinaryIO) -> None:
+async def _upload_continue(fin: BinaryIO, fout: WritableFile) -> None:
     offset = await fout.tell()
     await fout.seek(offset)
     fin.seek(offset, os.SEEK_SET)
@@ -792,7 +830,7 @@ async def _upload_continue(fin: BinaryIO, fout: BinaryIO) -> None:
 
 async def find_duplicate_nodes(
     drive: Drive,
-    root_node: Node = None,
+    root_node: Node | None = None,
 ) -> list[list[Node]]:
     if not root_node:
         root_node = await drive.get_root_node()
@@ -813,10 +851,12 @@ async def find_duplicate_nodes(
     return rv
 
 
-async def _in_ancestor_set(drive: Drive, node: Node, ancestor_set: set[Node]) -> bool:
+async def _in_ancestor_set(drive: Drive, node: Node, ancestor_set: set[str]) -> bool:
     if node.parent_id is None:
         return False
     parent = await drive.get_node_by_id(node.parent_id)
+    if not parent:
+        return False
     if parent.id_ in ancestor_set:
         return True
     included = await _in_ancestor_set(drive, parent, ancestor_set)

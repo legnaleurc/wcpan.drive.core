@@ -1,4 +1,5 @@
 import contextlib
+from typing import cast
 import unittest
 
 from wcpan.drive.core.drive import Drive
@@ -13,6 +14,7 @@ from wcpan.drive.core.exceptions import (
     DownloadError,
 )
 from wcpan.drive.core.test import test_factory, TestDriver
+from wcpan.drive.core.types import Node
 
 
 class TestDrive(unittest.IsolatedAsyncioTestCase):
@@ -32,6 +34,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
             self._raii = stack.pop_all()
 
     async def asyncTearDown(self):
+        assert self._raii
         await self._raii.aclose()
         self._driver = None
         self._drive = None
@@ -55,11 +58,11 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(applied_changes, pseudo_changes)
 
         node = await self._drive.get_node_by_path("/name_1")
-        self.assertIsNotNone(node)
+        assert node
         self.assertTrue(node.is_folder)
         self.assertEqual(node.id_, node_1.id_)
         node = await self._drive.get_node_by_path("/name_1/name_2")
-        self.assertIsNotNone(node)
+        assert node
         self.assertTrue(node.is_file)
         self.assertEqual(node.id_, node_2.id_)
         self.assertEqual(node.size, 2)
@@ -103,10 +106,12 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(applied_changes, pseudo_changes)
 
         node = await self._drive.get_node_by_path("/name_1/name_4")
+        assert node
         self.assertTrue(node.is_image)
         self.assertEqual(node.image_width, 640)
         self.assertEqual(node.image_height, 480)
         node = await self._drive.get_node_by_path("/name_1/name_5")
+        assert node
         self.assertTrue(node.is_video)
         self.assertEqual(node.video_width, 640)
         self.assertEqual(node.video_height, 480)
@@ -132,8 +137,10 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
         node = await self._drive.get_node_by_path("/name_1")
         self.assertIsNone(node)
         node = await self._drive.get_node_by_id(node_4.id_)
+        assert node
         self.assertIsNone(node.parent_id)
         node = await self._drive.get_node_by_id(node_5.id_)
+        assert node
         self.assertIsNone(node.parent_id)
 
     async def testCreateFolder(self):
@@ -152,19 +159,19 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # invalid parent
         with self.assertRaises(TypeError):
-            await api(None, "name")
+            await api(cast(Node, None), "name")
         mock.assert_not_called()
         mock.reset_mock()
 
         # invalid name
         with self.assertRaises(TypeError):
-            await api(root_node, None)
+            await api(root_node, cast(str, None))
         mock.assert_not_called()
         mock.reset_mock()
 
         # invalid parent
         node = await self._drive.get_node_by_path("/name_1")
-        self.assertIsNotNone(node)
+        assert node
         with self.assertRaises(ParentIsNotFolderError):
             await api(node, "invalid")
         mock.assert_not_called()
@@ -230,12 +237,13 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # source is not None
         with self.assertRaises(TypeError):
-            await api(None, root_node)
+            await api(cast(Node, None), root_node)
         mock.assert_not_called()
         mock.reset_mock()
 
         # at least have a new parent or new name
         node = await self._drive.get_node_by_path("/name_1")
+        assert node
         with self.assertRaises(TypeError):
             await api(node, None, None)
         mock.assert_not_called()
@@ -243,7 +251,9 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # do not touch trash can
         node1 = await self._drive.get_node_by_path("/name_1")
+        assert node1
         node2 = await self._drive.get_node_by_id(node_5.id_)
+        assert node2
         with self.assertRaises(TrashedNodeError):
             await api(node1, node2, None)
         with self.assertRaises(TrashedNodeError):
@@ -253,6 +263,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # do not move to the source folder
         node = await self._drive.get_node_by_path("/name_1")
+        assert node
         with self.assertRaises(LineageError):
             await api(node, node, None)
         mock.assert_not_called()
@@ -337,12 +348,13 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # do not accept invalid node
         with self.assertRaises(TypeError):
-            await api(None)
+            await api(cast(Node, None))
         mock.assert_not_called()
         mock.reset_mock()
 
         # good call
         node = await self._drive.get_node_by_path("/name_1")
+        assert node
         await api(node)
         mock.assert_called_once_with(node)
         mock.reset_mock()
@@ -367,6 +379,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # do not download folder
         node = await self._drive.get_node_by_path("/name_1")
+        assert node
         with self.assertRaises(DownloadError):
             await api(node)
         mock.assert_not_called()
@@ -374,12 +387,13 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # do not accept invalid node
         with self.assertRaises(TypeError):
-            await api(None)
+            await api(cast(Node, None))
         mock.assert_not_called()
         mock.reset_mock()
 
         # good call
         node = await self._drive.get_node_by_path("/name_1/name_2")
+        assert node
         await api(node)
         mock.assert_called_once_with(node)
         mock.reset_mock()
@@ -404,6 +418,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # do not upload to a file
         node = await self._drive.get_node_by_path("/name_1/name_2")
+        assert node
         with self.assertRaises(ParentIsNotFolderError):
             await api(node, "name_3")
         mock.assert_not_called()
@@ -411,6 +426,7 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # do not conflict
         node = await self._drive.get_node_by_path("/name_1")
+        assert node
         with self.assertRaises(NodeConflictedError):
             await api(node, "name_2")
         mock.assert_not_called()
@@ -418,13 +434,13 @@ class TestDrive(unittest.IsolatedAsyncioTestCase):
 
         # do not accept invalid node
         with self.assertRaises(TypeError):
-            await api(None, "name_3")
+            await api(cast(Node, None), "name_3")
         mock.assert_not_called()
         mock.reset_mock()
 
         # do not accept invalid name
         with self.assertRaises(TypeError):
-            await api(node, None)
+            await api(node, cast(str, None))
         mock.assert_not_called()
         mock.reset_mock()
 

@@ -1,13 +1,13 @@
 from concurrent.futures import Executor
 from pathlib import PurePath
-from typing import Pattern
+from typing import Callable, Pattern, Self, cast
 import asyncio
 import functools
 import re
 import sqlite3
 
 from .exceptions import CacheError
-from .types import Node, ChangeDict
+from .types import Node, ChangeDict, NodeDict
 
 
 SQL_CREATE_TABLES = [
@@ -95,11 +95,11 @@ class Cache(object):
         self._pool = pool
         self._raii = None
 
-    async def __aenter__(self) -> "Cache":
+    async def __aenter__(self) -> Self:
         await self._bg(initialize)
         return self
 
-    async def __aexit__(self, type_, value, traceback) -> bool:
+    async def __aexit__(self, type_, value, traceback) -> None:
         pass
 
     async def get_root_id(self) -> str:
@@ -110,7 +110,9 @@ class Cache(object):
 
     async def get_root_node(self) -> Node:
         root_id = await self.get_root_id()
-        return await self.get_node_by_id(root_id)
+        root = await self.get_node_by_id(root_id)
+        assert root, "root node should not be none"
+        return root
 
     async def get_metadata(self, key: str) -> str:
         return await self._bg(get_metadata, key)
@@ -163,7 +165,7 @@ class Cache(object):
     async def find_multiple_parents_nodes(self) -> list[Node]:
         return await self._bg(find_multiple_parents_nodes)
 
-    async def _bg(self, fn, *args):
+    async def _bg(self, fn: Callable, *args):
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(self._pool, fn, self._dsn, *args)
 
@@ -179,7 +181,7 @@ class Database(object):
         # self._db.execute('PRAGMA foreign_keys = 1;')
         return self._db
 
-    def __exit__(self, type_, value, traceback) -> bool:
+    def __exit__(self, type_, value, traceback) -> None:
         self._db.close()
         self._db = None
 
@@ -192,7 +194,7 @@ class ReadOnly(object):
         self._cursor = self._db.cursor()
         return self._cursor
 
-    def __exit__(self, type_, value, traceback) -> bool:
+    def __exit__(self, type_, value, traceback) -> None:
         self._cursor.close()
 
 
@@ -204,7 +206,7 @@ class ReadWrite(object):
         self._cursor = self._db.cursor()
         return self._cursor
 
-    def __exit__(self, type_, value, traceback) -> bool:
+    def __exit__(self, type_, value, traceback) -> None:
         if self._db.in_transaction:
             if type_ is None:
                 self._db.commit()
@@ -351,9 +353,9 @@ def get_children_by_id(dsn: str, node_id: str) -> list[Node]:
             (node_id,),
         )
         rv = query.fetchall()
-
-        children = [inner_get_node_by_id(query, _["child"]) for _ in rv]
-    return children
+        raw_query = (inner_get_node_by_id(query, _["child"]) for _ in rv)
+        nodes = [_ for _ in raw_query if _]
+    return nodes
 
 
 def get_trashed_nodes(dsn: str) -> list[Node]:
@@ -367,9 +369,9 @@ def get_trashed_nodes(dsn: str) -> list[Node]:
             (True,),
         )
         rv = query.fetchall()
-
-        children = [inner_get_node_by_id(query, _["id"]) for _ in rv]
-    return children
+        raw_query = (inner_get_node_by_id(query, _["id"]) for _ in rv)
+        nodes = [_ for _ in raw_query if _]
+    return nodes
 
 
 def apply_changes(
@@ -438,8 +440,9 @@ def find_orphan_nodes(dsn: str) -> list[Node]:
         ;"""
         )
         rv = query.fetchall()
-        rv = [inner_get_node_by_id(query, _["id"]) for _ in rv]
-    return rv
+        raw_query = (inner_get_node_by_id(query, _["id"]) for _ in rv)
+        nodes = [_ for _ in raw_query if _]
+    return nodes
 
 
 def find_multiple_parents_nodes(dsn: str) -> list[Node]:
@@ -453,8 +456,9 @@ def find_multiple_parents_nodes(dsn: str) -> list[Node]:
         ;"""
         )
         rv = query.fetchall()
-        rv = [inner_get_node_by_id(query, _["child"]) for _ in rv]
-    return rv
+        raw_query = (inner_get_node_by_id(query, _["child"]) for _ in rv)
+        nodes = [_ for _ in raw_query if _]
+    return nodes
 
 
 def inner_get_metadata(query: sqlite3.Cursor, key: str) -> str:
@@ -490,7 +494,7 @@ def inner_get_node_by_id(
     rv = query.fetchone()
     if not rv:
         return None
-    node = dict(rv)
+    node: NodeDict = cast(NodeDict, dict(rv))
     node["id"] = node_id
 
     query.execute(
@@ -567,8 +571,7 @@ def inner_get_node_by_id(
     rv = query.fetchall()
     node["private"] = None if not rv else {_["key"]: _["value"] for _ in rv}
 
-    node = Node.from_dict(node)
-    return node
+    return Node.from_dict(node)
 
 
 def inner_insert_node(query: sqlite3.Cursor, node: Node) -> None:

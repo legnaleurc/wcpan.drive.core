@@ -14,7 +14,7 @@ __all__ = (
 )
 
 
-from typing import TypeAlias, TypedDict, Literal
+from typing import TypeAlias, TypedDict, Literal, cast
 import os
 
 import arrow
@@ -140,7 +140,7 @@ class Node(object):
         return self._parent_list
 
     @property
-    def parent_id(self) -> str:
+    def parent_id(self) -> str | None:
         return None if not self._parent_list else self._parent_list[0]
 
     @property
@@ -169,10 +169,14 @@ class Node(object):
 
     @property
     def image_width(self) -> int | None:
+        if not self._image:
+            return None
         return self._image["width"] if self.is_image else None
 
     @property
     def image_height(self) -> int | None:
+        if not self._image:
+            return None
         return self._image["height"] if self.is_image else None
 
     @property
@@ -181,14 +185,20 @@ class Node(object):
 
     @property
     def video_width(self) -> int | None:
+        if not self._video:
+            return None
         return self._video["width"] if self.is_video else None
 
     @property
     def video_height(self) -> int | None:
+        if not self._video:
+            return None
         return self._video["height"] if self.is_video else None
 
     @property
     def video_ms_duration(self) -> int | None:
+        if not self._video:
+            return None
         return self._video["ms_duration"] if self.is_video else None
 
     @property
@@ -198,18 +208,18 @@ class Node(object):
     def clone(
         self,
         *,
-        name: str = None,
-        trashed: bool = None,
-        created: arrow.Arrow = None,
-        modified: arrow.Arrow = None,
-        parent_list: list[str] = None,
-        is_folder: bool = None,
-        mime_type: str = None,
-        hash_: str = None,
-        size: int = None,
-        image: ImageDict = None,
-        video: VideoDict = None,
-        private: PrivateDict = None,
+        name: str | None = None,
+        trashed: bool | None = None,
+        created: arrow.Arrow | None = None,
+        modified: arrow.Arrow | None = None,
+        parent_list: list[str] | None = None,
+        is_folder: bool | None = None,
+        mime_type: str | None = None,
+        hash_: str | None = None,
+        size: int | None = None,
+        image: ImageDict | None = None,
+        video: VideoDict | None = None,
+        private: PrivateDict | None = None,
     ) -> Node:
         return Node(
             id_=self.id_,
@@ -259,7 +269,7 @@ class Node(object):
             dict_["private"] = None
         else:
             dict_["private"] = self.private.copy()
-        return dict_
+        return cast(NodeDict, dict_)
 
 
 class RemoveChangeDict(TypedDict):
