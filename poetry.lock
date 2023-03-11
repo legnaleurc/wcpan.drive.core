@@ -232,19 +232,7 @@ files = [
     {file = "tomli-2.0.1.tar.gz", hash = "sha256:de526c12914f0c550d15924c62d72abc48d6fe7364aa87328337a31007fe8a4f"},
 ]
 
-[[package]]
-name = "wcpan-logger"
-version = "1.5.0"
-description = "A RAII style logging module"
-category = "main"
-optional = false
-python-versions = ">=3.5"
-files = [
-    {file = "wcpan.logger-1.5.0-py3-none-any.whl", hash = "sha256:6b6378a077008fe30051eee0d0a2ccd19e62b8f48975f1d1fd7b0574b3497a61"},
-    {file = "wcpan.logger-1.5.0.tar.gz", hash = "sha256:644ec36334ebd860235fee0080a5a92dd06cfb39588b94cc237b46c1b0ec46b7"},
-]
-
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "2f356d97de6d5b0cce3763c80fd50312384a02cf212c4c5feab873e65de5aec4"
+content-hash = "6d884ccdbb269e5592381c93dda4f4b94894013715b973100199575f0c0753ad"

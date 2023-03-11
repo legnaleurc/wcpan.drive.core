@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "wcpan.drive.core"
+name = "wcpan-drive-core"
 version = "3.2.0"
 description = "asynchronous generic cloud drive library"
 authors = ["Wei-Cheng Pan <legnaleurc@gmail.com>"]
@@ -10,15 +10,15 @@ packages = [{include = "wcpan"}]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
 ]
 
 [tool.poetry.dependencies]
 python = "^3.10"
 PyYAML = "^6.0"
 arrow = "^1.2.3"
-"wcpan.logger" = "^1.2"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.1.0"
