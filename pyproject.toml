@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "wcpan-drive-core"
-version = "3.2.1"
+version = "4.0.0"
 description = "asynchronous generic cloud drive library"
 authors = ["Wei-Cheng Pan <legnaleurc@gmail.com>"]
 license = "MIT"
