@@ -1,86 +1,43 @@
+from pathlib import Path
+
 from .types import Node
+
+
+__all__ = (
+    "DriveError",
+    "InvalidServiceError",
+    "NodeExistsError",
+    "NodeNotFoundError",
+    "IsADirectoryError",
+    "UnauthorizedError",
+)
 
 
 class DriveError(Exception):
     pass
 
 
-class InvalidRemoteDriverError(DriveError):
+class InvalidServiceError(DriveError):
     pass
 
 
-class InvalidMiddlewareError(DriveError):
-    pass
-
-
-# NOTE *MUST* be picklable
-class CacheError(DriveError):
-    pass
-
-
-class InvalidNameError(DriveError):
-    def __init__(self, name: str) -> None:
-        self._name = name
-
-    def __str__(self) -> str:
-        return f"invalid name: {self._name}"
-
-
-class NodeTreeError(DriveError):
-    pass
-
-
-class NodeConflictedError(NodeTreeError):
+class NodeExistsError(DriveError):
     def __init__(self, node: Node) -> None:
-        self._node = node
-
-    def __str__(self) -> str:
-        return f"node already exists: {self.node.name}"
-
-    @property
-    def node(self) -> Node:
-        return self._node
+        super().__init__(f"node already exists: {node.name}")
+        self.node = node
 
 
-class ParentNotFoundError(NodeTreeError):
-    def __init__(self, id_: str) -> None:
-        self._id = id_
-
-    def __str__(self) -> str:
-        return f"parent id not found: {self._id}"
+class NodeNotFoundError(DriveError):
+    def __init__(self, id: str) -> None:
+        super().__init__(f"node not found: {id}")
+        self.id = id
 
 
-class NodeNotFoundError(NodeTreeError):
-    def __init__(self, path_or_id: str) -> None:
-        self._path_or_id = path_or_id
-
-    def __str__(self) -> str:
-        return f"node not found: {self._path_or_id}"
-
-
-class RootNodeError(NodeTreeError):
-    pass
-
-
-class TrashedNodeError(NodeTreeError):
-    pass
-
-
-class ParentIsNotFolderError(NodeTreeError):
-    pass
-
-
-class LineageError(NodeTreeError):
-    pass
+class IsADirectoryError(DriveError):
+    def __init__(self, path: Path) -> None:
+        super().__init__(f"{path} is a directory")
+        self.path = path
 
 
 class UnauthorizedError(DriveError):
-    pass
-
-
-class DownloadError(DriveError):
-    pass
-
-
-class UploadError(DriveError):
     pass

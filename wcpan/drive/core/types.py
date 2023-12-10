@@ -1,297 +1,70 @@
-from __future__ import annotations
+from abc import ABCMeta, abstractmethod
+from collections.abc import (
+    AsyncIterator,
+    AsyncIterable,
+    Awaitable,
+    Callable,
+)
+from contextlib import AbstractAsyncContextManager
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import PurePath
+from typing import Literal, Self
 
 
 __all__ = (
-    "ImageDict",
-    "VideoDict",
-    "PrivateDict",
-    "NodeDict",
-    "Node",
-    "RemoveChangeDict",
-    "UpdateChangeDict",
-    "ChangeDict",
+    "ChangeAction",
+    "CreateFileService",
+    "CreateFileServiceMiddleware",
+    "CreateSnapshotService",
+    "CreateSnapshotServiceMiddleware",
+    "FileService",
+    "Hasher",
     "MediaInfo",
+    "Node",
+    "PrivateDict",
+    "ReadableFile",
+    "RemoveAction",
+    "UpdateAction",
+    "WritableFile",
 )
 
 
-from typing import TypeAlias, TypedDict, Literal, cast
-import os
-
-import arrow
+type PrivateDict = dict[str, str]
 
 
-PathOrString: TypeAlias = str | os.PathLike
-
-
-class ImageDict(TypedDict):
-    width: int
-    height: int
-
-
-class VideoDict(TypedDict):
+@dataclass(frozen=True, kw_only=True)
+class Node:
+    id: str
+    parent_id: str | None
+    name: str
+    is_directory: bool
+    is_trashed: bool
+    ctime: datetime
+    mtime: datetime
+    mime_type: str
+    hash: str
+    size: int
+    is_image: bool
+    is_video: bool
     width: int
     height: int
     ms_duration: int
-
-
-PrivateDict: TypeAlias = dict[str, str]
-
-
-class NodeDict(TypedDict):
-    id: str
-    name: str
-    trashed: bool
-    created: str
-    modified: str
-    parent_list: list[str]
-    is_folder: bool
-    mime_type: str | None
-    hash: str | None
-    size: int | None
-    image: ImageDict | None
-    video: VideoDict | None
     private: PrivateDict | None
 
 
-class Node(object):
-    @staticmethod
-    def from_dict(dict_: NodeDict) -> Node:
-        return Node(
-            id_=dict_["id"],
-            name=dict_["name"],
-            trashed=bool(dict_["trashed"]),
-            created=arrow.get(dict_["created"]),
-            modified=arrow.get(dict_["modified"]),
-            parent_list=dict_.get("parent_list", []),
-            is_folder=dict_["is_folder"],
-            mime_type=dict_["mime_type"],
-            hash_=dict_["hash"],
-            size=dict_["size"],
-            image=dict_["image"],
-            video=dict_["video"],
-            private=dict_.get("private", None),
-        )
-
-    def __init__(
-        self,
-        *,
-        id_: str,
-        name: str,
-        trashed: bool,
-        created: arrow.Arrow,
-        modified: arrow.Arrow,
-        parent_list: list[str],
-        is_folder: bool,
-        mime_type: str | None,
-        hash_: str | None,
-        size: int | None,
-        image: ImageDict | None,
-        video: VideoDict | None,
-        private: PrivateDict | None,
-    ) -> None:
-        self._id = id_
-        self._name = name
-        self._trashed = trashed
-        self._created = created
-        self._modified = modified
-        self._parent_list = parent_list
-        self._is_folder = is_folder
-        self._mime_type = mime_type
-        self._hash = hash_
-        self._size = size
-        self._image = image
-        self._video = video
-        self._private = private
-
-    def __repr__(self):
-        return f"Node(id='{self.id_}')"
-
-    def __eq__(self, that: Node) -> bool:
-        if not isinstance(that, Node):
-            return NotImplemented
-        return self.id_ == that.id_
-
-    @property
-    def is_root(self) -> bool:
-        return self._name is None
-
-    @property
-    def id_(self) -> str:
-        return self._id
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def trashed(self) -> bool:
-        return self._trashed
-
-    @property
-    def created(self) -> arrow.Arrow:
-        return self._created
-
-    @property
-    def modified(self) -> arrow.Arrow:
-        return self._modified
-
-    @property
-    def parent_list(self) -> list[str]:
-        return self._parent_list
-
-    @property
-    def parent_id(self) -> str | None:
-        return None if not self._parent_list else self._parent_list[0]
-
-    @property
-    def is_file(self) -> bool:
-        return not self._is_folder
-
-    @property
-    def is_folder(self) -> bool:
-        return self._is_folder
-
-    @property
-    def mime_type(self) -> str | None:
-        return self._mime_type
-
-    @property
-    def hash_(self) -> str | None:
-        return self._hash
-
-    @property
-    def size(self) -> int | None:
-        return self._size
-
-    @property
-    def is_image(self) -> bool:
-        return self._image is not None
-
-    @property
-    def image_width(self) -> int | None:
-        if not self._image:
-            return None
-        return self._image["width"] if self.is_image else None
-
-    @property
-    def image_height(self) -> int | None:
-        if not self._image:
-            return None
-        return self._image["height"] if self.is_image else None
-
-    @property
-    def is_video(self) -> bool:
-        return self._video is not None
-
-    @property
-    def video_width(self) -> int | None:
-        if not self._video:
-            return None
-        return self._video["width"] if self.is_video else None
-
-    @property
-    def video_height(self) -> int | None:
-        if not self._video:
-            return None
-        return self._video["height"] if self.is_video else None
-
-    @property
-    def video_ms_duration(self) -> int | None:
-        if not self._video:
-            return None
-        return self._video["ms_duration"] if self.is_video else None
-
-    @property
-    def private(self) -> PrivateDict | None:
-        return self._private
-
-    def clone(
-        self,
-        *,
-        name: str | None = None,
-        trashed: bool | None = None,
-        created: arrow.Arrow | None = None,
-        modified: arrow.Arrow | None = None,
-        parent_list: list[str] | None = None,
-        is_folder: bool | None = None,
-        mime_type: str | None = None,
-        hash_: str | None = None,
-        size: int | None = None,
-        image: ImageDict | None = None,
-        video: VideoDict | None = None,
-        private: PrivateDict | None = None,
-    ) -> Node:
-        return Node(
-            id_=self.id_,
-            name=self.name if name is None else name,
-            trashed=self.trashed if trashed is None else trashed,
-            created=self.created if created is None else created,
-            modified=self.modified if modified is None else modified,
-            parent_list=self.parent_list if parent_list is None else parent_list,
-            is_folder=self.is_folder if is_folder is None else is_folder,
-            mime_type=self.mime_type if mime_type is None else mime_type,
-            hash_=self.hash_ if hash_ is None else hash_,
-            size=self.size if size is None else size,
-            image=self._image if image is None else image,
-            video=self._video if video is None else video,
-            private=self.private if private is None else private,
-        )
-
-    def to_dict(self) -> NodeDict:
-        dict_ = {
-            "id": self.id_,
-            "name": self.name,
-            "trashed": self.trashed,
-            "is_folder": self.is_folder,
-            "created": self.created.isoformat(),
-            "modified": self.modified.isoformat(),
-            "parent_list": self.parent_list.copy(),
-            "mime_type": self.mime_type,
-            "hash": self.hash_,
-            "size": self.size,
-        }
-        if not self.is_image:
-            dict_["image"] = None
-        else:
-            dict_["image"] = {
-                "width": self.image_width,
-                "height": self.image_height,
-            }
-        if not self.is_video:
-            dict_["video"] = None
-        else:
-            dict_["video"] = {
-                "width": self.video_width,
-                "height": self.video_height,
-                "ms_duration": self.video_ms_duration,
-            }
-        if not self.private:
-            dict_["private"] = None
-        else:
-            dict_["private"] = self.private.copy()
-        return cast(NodeDict, dict_)
+type RemoveAction = tuple[Literal[True], str]
+type UpdateAction = tuple[Literal[False], Node]
+type ChangeAction = RemoveAction | UpdateAction
 
 
-class RemoveChangeDict(TypedDict):
-    removed: Literal[True]
-    id: str
-
-
-class UpdateChangeDict(TypedDict):
-    removed: Literal[False]
-    node: NodeDict
-
-
-ChangeDict: TypeAlias = RemoveChangeDict | UpdateChangeDict
-
-
-class MediaInfo(object):
-    @staticmethod
-    def image(width: int, height: int) -> "MediaInfo":
+class MediaInfo:
+    @classmethod
+    def image(cls, width: int, height: int) -> Self:
         return MediaInfo(is_image=True, width=width, height=height)
 
-    @staticmethod
-    def video(width: int, height: int, ms_duration: int) -> "MediaInfo":
+    @classmethod
+    def video(cls, width: int, height: int, ms_duration: int) -> Self:
         return MediaInfo(
             is_video=True,
             width=width,
@@ -342,20 +115,457 @@ class MediaInfo(object):
         return self._ms_duration
 
 
-class ReadOnlyContext(object):
-    def __init__(
+class ReadableFile(AsyncIterable[bytes], metaclass=ABCMeta):
+    """
+    An async readable file interface.
+    """
+
+    @abstractmethod
+    async def read(self, length: int) -> bytes:
+        """
+        Read at most `length` bytes.
+        """
+
+    @abstractmethod
+    async def seek(self, offset: int) -> int:
+        """
+        Seek to `offset` position. Always starts from the begining.
+        """
+
+    @abstractmethod
+    async def node(self) -> Node:
+        """
+        Get the node being read.
+        """
+
+
+class Hasher(metaclass=ABCMeta):
+    """
+    Hash calculator.
+    """
+
+    @abstractmethod
+    async def update(self, data: bytes) -> None:
+        """
+        Put `data` into the stream.
+        """
+
+    @abstractmethod
+    async def digest(self) -> bytes:
+        """
+        Get raw digest.
+        """
+
+    @abstractmethod
+    async def hexdigest(self) -> str:
+        """
+        Get hex digest.
+        """
+
+    @abstractmethod
+    async def copy(self) -> Self:
+        """
+        Return a copy to self.
+        """
+
+
+type CreateHasher = Callable[[], Awaitable[Hasher]]
+
+
+class WritableFile(metaclass=ABCMeta):
+    """
+    An async writable file interface.
+    """
+
+    @abstractmethod
+    async def tell(self) -> int:
+        """
+        Get current position.
+        """
+
+    @abstractmethod
+    async def seek(self, offset: int) -> int:
+        """
+        Seek to `offset` position. Always starts from the begining.
+        """
+
+    @abstractmethod
+    async def write(self, chunk: bytes) -> int:
+        """
+        Writes `chunk` to the stream.
+        Returns bytes writen to buffer.
+        """
+
+    @abstractmethod
+    async def flush(self) -> None:
+        """
+        Flush buffer.
+        """
+
+    @abstractmethod
+    async def node(self) -> Node | None:
+        """
+        Get the wrote node. May be `None` if write failed.
+        """
+
+
+class Service(metaclass=ABCMeta):
+    @property
+    @abstractmethod
+    def api_version(self) -> int:
+        """
+        Get competible API version for this class.
+        """
+
+
+type CreateService[T: Service] = Callable[[], AbstractAsyncContextManager[T]]
+type CreateServiceMiddleware[T: Service] = Callable[[T], AbstractAsyncContextManager[T]]
+
+
+class FileService(Service, metaclass=ABCMeta):
+    """
+    Provides actions to cloud drives.
+    """
+
+    @abstractmethod
+    async def get_initial_cursor(self) -> str:
+        """
+        Get the initial check point.
+        """
+
+    @abstractmethod
+    async def get_root(self) -> Node:
+        """
+        Fetch the root node.
+        """
+
+    @abstractmethod
+    def get_changes(
         self,
+        cursor: str,
+    ) -> AsyncIterator[tuple[list[ChangeAction], str]]:
+        """
+        Fetch changes starts from `cursor`.
+
+        Will be used like this:
+        ```
+        async for changes, next_cursor in self.fetch_changes('...'):
+            ...
+        ```
+        So you should yield a page for every iteration.
+        """
+
+    @abstractmethod
+    async def move(
+        self,
+        node: Node,
         *,
-        config_path: os.PathLike,
-        data_path: os.PathLike,
+        new_parent: Node | None,
+        new_name: str | None,
+        trashed: bool | None,
+    ) -> Node:
+        """
+        Changes the state of the given node:
+        1. Rename the node.
+        2. Move the node to another directory.
+        3. Put the node to trash or restore it from trash.
+
+        `node` is the node to be modified.
+
+        `new_parent` is the new parent directory. `None` means don't move the node.
+
+        `new_name` is the new node name. `None` means don't rename the node.
+
+        `trashed` sets to `True` to put the node to trash. Sets to `False` will
+        restore it. `None` means don't change trash state.
+        """
+
+    @abstractmethod
+    async def purge_trash(self) -> None:
+        """
+        Purge everything in the trash.
+
+        Should raise exception if failed.
+        """
+
+    @abstractmethod
+    async def create_directory(
+        self,
+        name: str,
+        parent: Node,
+        *,
+        exist_ok: bool,
+        private: PrivateDict | None,
+    ) -> Node:
+        """
+        Create a directory.
+
+        `name` will be the name of the directory.
+
+        `parent` should be a directory you want to put this directory in.
+
+        If `exist_ok` is `False`, you should not create the directory if it is
+        already exists, and raise an exception.
+
+        `private` is an optional metadata, you can decide how to place this for
+        each services.
+
+        Will return the created node.
+        """
+
+    @abstractmethod
+    def download_file(self, node: Node) -> AbstractAsyncContextManager[ReadableFile]:
+        """
+        Download the node.
+
+        Will return a `ReadableFile` which is a file-like object.
+        """
+
+    @abstractmethod
+    def upload_file(
+        self,
+        name: str,
+        parent: Node,
+        *,
+        size: int | None,
+        mime_type: str | None,
+        media_info: MediaInfo | None,
+        private: PrivateDict | None,
+    ) -> AbstractAsyncContextManager[WritableFile]:
+        """
+        Upload a file.
+
+        `name` is the name of the uploaded file.
+
+        `parent` is the parent directory where this file upload to.
+
+        `size` can be `None`, for cases that the file size is unavailable.
+        e.g. The uploading file is from a stream.
+
+        `mime_type`, `media_info` and `private` are optional. It is your choice
+        to decide how to place these properties.
+        """
+
+    @abstractmethod
+    async def get_hasher_factory(self) -> CreateHasher:
+        """
+        Get a hash calculator factory.
+        """
+
+    @abstractmethod
+    async def is_authorized(self) -> bool:
+        """
+        Is OAuth 2.0 authorized.
+        """
+
+    @abstractmethod
+    async def get_oauth_url(self) -> str:
+        """
+        Get OAuth 2.0 URL.
+        """
+
+    @abstractmethod
+    async def set_oauth_token(self, token: str) -> None:
+        """
+        Set OAuth 2.0 token.
+        """
+
+
+type CreateFileService = CreateService[FileService]
+type CreateFileServiceMiddleware = CreateServiceMiddleware[FileService]
+
+
+class SnapshotService(Service, metaclass=ABCMeta):
+    """
+    Provides actions to cache file metadata.
+    """
+
+    @abstractmethod
+    async def get_root(self) -> Node:
+        """
+        Get root directory as Node.
+        """
+
+    @abstractmethod
+    async def set_root(self, node: Node) -> None:
+        """
+        Set root directory to the snapshot.
+        """
+
+    @abstractmethod
+    async def get_current_cursor(self) -> str:
+        """
+        Get the current cursor. If no cursor present (e.g. the first run),
+        should return an empty string.
+        """
+
+    @abstractmethod
+    async def get_node_by_id(self, node_id: str) -> Node:
+        """
+        Get node by ID.
+        """
+
+    @abstractmethod
+    async def get_node_by_path(self, path: PurePath) -> Node:
+        """
+        Resolve node by file path.
+        """
+
+    @abstractmethod
+    async def resolve_path_by_id(self, node_id: str) -> PurePath:
+        """
+        Resolve absolute path by ID.
+        """
+
+    @abstractmethod
+    async def get_child_by_name(self, name: str, parent_id: str) -> Node:
+        """
+        Get a child under the given parent by name.
+        """
+
+    @abstractmethod
+    async def get_children_by_id(self, parent_id: str) -> list[Node]:
+        """
+        Get first-level children under a node.
+        """
+
+    @abstractmethod
+    async def get_trashed_nodes(self) -> list[Node]:
+        """
+        Get trashed nodes.
+        """
+
+    @abstractmethod
+    async def apply_changes(
+        self,
+        changes: list[ChangeAction],
+        cursor: str,
     ) -> None:
-        self._config_path = config_path
-        self._data_path = data_path
+        """
+        Apply the given changes to the snapshot.
+        """
 
-    @property
-    def config_path(self) -> os.PathLike:
-        return self._config_path
+    @abstractmethod
+    async def find_nodes_by_regex(self, pattern: str) -> list[Node]:
+        """
+        Find node by regex.
+        """
 
-    @property
-    def data_path(self) -> os.PathLike:
-        return self._data_path
+
+type CreateSnapshotService = CreateService[SnapshotService]
+type CreateSnapshotServiceMiddleware = CreateServiceMiddleware[SnapshotService]
+
+
+class Drive(metaclass=ABCMeta):
+    """
+    Interact with the drive.
+    """
+
+    @abstractmethod
+    async def get_root(self) -> Node:
+        """Get the root node."""
+
+    @abstractmethod
+    async def get_node_by_id(self, node_id: str) -> Node:
+        """Get node by node id."""
+
+    @abstractmethod
+    async def get_node_by_path(self, path: PurePath) -> Node:
+        """Get node by absolute path."""
+
+    @abstractmethod
+    async def resolve_path(self, node: Node) -> PurePath:
+        """Resolve absolute path of the node."""
+
+    @abstractmethod
+    async def get_child_by_name(
+        self,
+        name: str,
+        parent: Node,
+    ) -> Node:
+        """Get node by given name and parent."""
+
+    @abstractmethod
+    async def get_children(self, parent: Node) -> list[Node]:
+        """Get the child node list of given node."""
+
+    @abstractmethod
+    async def get_trashed_nodes(self, flatten: bool = False) -> list[Node]:
+        """Get trashed node list."""
+
+    @abstractmethod
+    async def find_nodes_by_regex(self, pattern: str) -> list[Node]:
+        """Find nodes by name."""
+
+    @abstractmethod
+    def walk(
+        self,
+        node: Node,
+        *,
+        include_trashed: bool = False,
+    ) -> AsyncIterator[tuple[Node, list[Node], list[Node]]]:
+        """Traverse nodes from given node."""
+
+    @abstractmethod
+    async def create_directory(
+        self,
+        name: str,
+        parent: Node,
+        *,
+        exist_ok: bool = False,
+    ) -> Node:
+        """Create a directory."""
+
+    @abstractmethod
+    def download_file(self, node: Node) -> AbstractAsyncContextManager[ReadableFile]:
+        """Download file."""
+
+    @abstractmethod
+    def upload_file(
+        self,
+        name: str,
+        parent: Node,
+        *,
+        size: int | None = None,
+        mime_type: str | None = None,
+        media_info: MediaInfo | None = None,
+    ) -> AbstractAsyncContextManager[WritableFile]:
+        """Upload file."""
+
+    @abstractmethod
+    async def purge_trash(self) -> None:
+        """Purge everything in trash."""
+
+    @abstractmethod
+    async def move(
+        self,
+        node: Node,
+        *,
+        new_parent: Node | None = None,
+        new_name: str | None = None,
+        trashed: bool | None = None,
+    ) -> Node:
+        """Move or rename or trash the node."""
+
+    @abstractmethod
+    def sync(self) -> AsyncIterator[ChangeAction]:
+        """Synchronize the snapshot.
+
+        This is the ONLY function which will modify the snapshot.
+        """
+
+    @abstractmethod
+    async def get_hasher_factory(self) -> CreateHasher:
+        """Get a Hasher instance for checksum calculation."""
+
+    @abstractmethod
+    async def is_authorized(self) -> bool:
+        """Is the drive authorized."""
+
+    @abstractmethod
+    async def get_oauth_url(self) -> str:
+        """Get OAuth 2.0 URL"""
+
+    @abstractmethod
+    async def set_oauth_token(self, token: str) -> None:
+        """Set OAuth 2.0 token"""

@@ -1,490 +1,571 @@
-import contextlib
-from typing import cast
-import unittest
+from collections.abc import Iterable
+from contextlib import asynccontextmanager
+from pathlib import Path, PurePath
+from typing import AsyncIterable, cast
+from unittest import IsolatedAsyncioTestCase
+from unittest.mock import MagicMock, Mock, AsyncMock, patch
 
-from wcpan.drive.core.drive import Drive
+from wcpan.drive.core._drive import create_drive
 from wcpan.drive.core.exceptions import (
-    CacheError,
-    LineageError,
-    NodeConflictedError,
+    NodeExistsError,
     NodeNotFoundError,
-    ParentIsNotFolderError,
-    RootNodeError,
-    TrashedNodeError,
-    DownloadError,
+    UnauthorizedError,
 )
-from wcpan.drive.core.test import test_factory, TestDriver
-from wcpan.drive.core.types import Node
+from wcpan.drive.core.types import (
+    ChangeAction,
+    FileService,
+    Node,
+    ReadableFile,
+    SnapshotService,
+    WritableFile,
+)
 
 
-class TestDrive(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
-        async with contextlib.AsyncExitStack() as stack:
-            factory = stack.enter_context(
-                test_factory(
-                    middleware_list=[
-                        "tests.driver.FakeMiddleware",
-                        "tests.driver.FakeMiddleware",
-                    ]
-                )
+class CreateDriveTestCase(IsolatedAsyncioTestCase):
+    async def testCreate(self):
+        file_service = Mock(spec=FileService)
+        file_service.api_version = 4
+        create_file_service = create_mocked_acm(file_service)
+
+        create_file_service_middleware_1 = create_mocked_acm(file_service)
+        create_file_service_middleware_2 = create_mocked_acm(file_service)
+
+        snapshot_service = Mock(spec=SnapshotService)
+        snapshot_service.api_version = 4
+        create_snapshot_service = create_mocked_acm(snapshot_service)
+
+        create_snapshot_service_middleware_1 = create_mocked_acm(snapshot_service)
+        create_snapshot_service_middleware_2 = create_mocked_acm(snapshot_service)
+
+        async with create_drive(
+            file=create_file_service,
+            snapshot=create_snapshot_service,
+            file_middleware=[
+                create_file_service_middleware_1,
+                create_file_service_middleware_2,
+            ],
+            snapshot_middleware=[
+                create_snapshot_service_middleware_1,
+                create_snapshot_service_middleware_2,
+            ],
+        ):
+            create_file_service.assert_called_once()
+            create_file_service_middleware_1.assert_called_once_with(file_service)
+            create_file_service_middleware_2.assert_called_once_with(file_service)
+            create_snapshot_service.assert_called_once()
+            create_snapshot_service_middleware_1.assert_called_once_with(
+                snapshot_service
             )
-            self._drive: Drive = await stack.enter_async_context(factory())
-            self._driver: TestDriver = self._drive.remote.remote.remote
+            create_snapshot_service_middleware_2.assert_called_once_with(
+                snapshot_service
+            )
 
-            self._raii = stack.pop_all()
 
-    async def asyncTearDown(self):
-        assert self._raii
-        await self._raii.aclose()
-        self._driver = None
-        self._drive = None
-        self._raii = None
-
-    async def testSync(self):
-        driver = self._driver
-        root_node = await driver.fetch_root_node()
-
-        # normal file and folder
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_1", root_node)
-        node_1 = builder.commit()
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_2", node_1)
-        builder.to_file(2, "hash_2", "text/plain")
-        node_2 = builder.commit()
-
-        pseudo_changes = driver.pseudo.changes
-        applied_changes = [change async for change in self._drive.sync()]
-        self.assertEqual(applied_changes, pseudo_changes)
-
-        node = await self._drive.get_node_by_path("/name_1")
-        assert node
-        self.assertTrue(node.is_folder)
-        self.assertEqual(node.id_, node_1.id_)
-        node = await self._drive.get_node_by_path("/name_1/name_2")
-        assert node
-        self.assertTrue(node.is_file)
-        self.assertEqual(node.id_, node_2.id_)
-        self.assertEqual(node.size, 2)
-        self.assertEqual(node.hash_, "hash_2")
-        self.assertEqual(node.mime_type, "text/plain")
-
-        # TODO
-        # # atomic
-        # builder.reset()
-        # builder.update(create_file(
-        #     'id_3',
-        #     'name_3',
-        #     'id_1',
-        #     3,
-        #     'hash_3',
-        #     'text/plain',
-        # ))
-        # driver.set_changes('3', builder.changes)
-
-        # with self.assertRaises(Exception):
-        #     async for change in self._drive.sync():
-        #         raise Exception('interrupt')
-
-        # node = await self._drive.get_node_by_path('/name_1/name_3')
-        # self.assertIsNone(node)
-
-        # image and video
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_4", node_1)
-        builder.to_file(4, "hash_4", "image/png")
-        builder.to_image(640, 480)
-        node_4 = builder.commit()
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_5", node_1)
-        builder.to_file(5, "hash_5", "video/mpeg")
-        builder.to_video(640, 480, 5)
-        node_5 = builder.commit()
-
-        pseudo_changes = driver.pseudo.changes
-        applied_changes = [change async for change in self._drive.sync()]
-        self.assertEqual(applied_changes, pseudo_changes)
-
-        node = await self._drive.get_node_by_path("/name_1/name_4")
-        assert node
-        self.assertTrue(node.is_image)
-        self.assertEqual(node.image_width, 640)
-        self.assertEqual(node.image_height, 480)
-        node = await self._drive.get_node_by_path("/name_1/name_5")
-        assert node
-        self.assertTrue(node.is_video)
-        self.assertEqual(node.video_width, 640)
-        self.assertEqual(node.video_height, 480)
-        self.assertEqual(node.video_ms_duration, 5)
-
-        # delete file
-        driver.pseudo.delete(node_2.id_)
-
-        pseudo_changes = driver.pseudo.changes
-        applied_changes = [change async for change in self._drive.sync()]
-        self.assertEqual(applied_changes, pseudo_changes)
-
-        node = await self._drive.get_node_by_path("/name_1/name_2")
-        self.assertIsNone(node)
-
-        # delete folder
-        driver.pseudo.delete(node_1.id_)
-
-        pseudo_changes = driver.pseudo.changes
-        applied_changes = [change async for change in self._drive.sync()]
-        self.assertEqual(applied_changes, pseudo_changes)
-
-        node = await self._drive.get_node_by_path("/name_1")
-        self.assertIsNone(node)
-        node = await self._drive.get_node_by_id(node_4.id_)
-        assert node
-        self.assertIsNone(node.parent_id)
-        node = await self._drive.get_node_by_id(node_5.id_)
-        assert node
-        self.assertIsNone(node.parent_id)
-
-    async def testCreateFolder(self):
-        driver = self._driver
-        mock = driver.mock.create_folder
-        api = self._drive.create_folder
-        root_node = await driver.fetch_root_node()
-
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_1", root_node)
-        builder.to_file(1, "hash_1", "text/plain")
-        builder.commit()
-
-        async for dummy_change in self._drive.sync():
-            pass
-
-        # invalid parent
-        with self.assertRaises(TypeError):
-            await api(cast(Node, None), "name")
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # invalid name
-        with self.assertRaises(TypeError):
-            await api(root_node, cast(str, None))
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # invalid parent
-        node = await self._drive.get_node_by_path("/name_1")
-        assert node
-        with self.assertRaises(ParentIsNotFolderError):
-            await api(node, "invalid")
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # conflict
-        with self.assertRaises(NodeConflictedError):
-            await api(root_node, "name_1")
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # good calls
-        await api(root_node, "name")
-        mock.assert_called_once_with(
-            root_node,
-            "name",
-            None,
-            False,
+class AuthTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self._drive, self._fs, self._ss = await self.enterAsyncContext(
+            create_mocked_drive()
         )
-        mock.reset_mock()
 
-        await api(root_node, "name", True)
-        mock.assert_called_once_with(
-            root_node,
-            "name",
-            None,
-            True,
+    async def testGetOauthUrl(self):
+        aexpect(self._fs.get_oauth_url).return_value = 42
+        rv = await self._drive.get_oauth_url()
+
+        self.assertEqual(rv, 42)
+
+    async def testIsAuthorized(self):
+        aexpect(self._fs.is_authorized).return_value = True
+        rv = await self._drive.is_authorized()
+
+        self.assertTrue(rv)
+
+    async def testSetOauthToken(self):
+        await self._drive.set_oauth_token("42")
+
+        aexpect(self._fs.set_oauth_token).assert_awaited_once_with("42")
+
+
+class GetHasherTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self._drive, self._fs, self._ss = await self.enterAsyncContext(
+            create_mocked_drive()
         )
-        mock.reset_mock()
 
-    async def testRenameNode(self):
-        driver = self._driver
-        mock = driver.mock.rename_node
-        api = self._drive.rename_node
-        api_alt = self._drive.rename_node_by_path
-        root_node = await driver.fetch_root_node()
+    async def testGetHasherFactory(self):
+        aexpect(self._fs.get_hasher_factory).return_value = 42
+        rv = await self._drive.get_hasher_factory()
 
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_1", root_node)
-        node_1 = builder.commit()
+        self.assertEqual(rv, 42)
 
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_2", node_1)
-        builder.to_file(2, "hash_2", "text/plain")
-        builder.commit()
 
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_3", node_1)
-        builder.commit()
-
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_4", node_1)
-        builder.to_file(4, "hash_4", "text/plain")
-        builder.commit()
-
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_5", node_1)
-        builder.to_trashed()
-        node_5 = builder.commit()
-
-        async for dummy_change in self._drive.sync():
-            pass
-
-        # source is not None
-        with self.assertRaises(TypeError):
-            await api(cast(Node, None), root_node)
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # at least have a new parent or new name
-        node = await self._drive.get_node_by_path("/name_1")
-        assert node
-        with self.assertRaises(TypeError):
-            await api(node, None, None)
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # do not touch trash can
-        node1 = await self._drive.get_node_by_path("/name_1")
-        assert node1
-        node2 = await self._drive.get_node_by_id(node_5.id_)
-        assert node2
-        with self.assertRaises(TrashedNodeError):
-            await api(node1, node2, None)
-        with self.assertRaises(TrashedNodeError):
-            await api(node2, node1, None)
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # do not move to the source folder
-        node = await self._drive.get_node_by_path("/name_1")
-        assert node
-        with self.assertRaises(LineageError):
-            await api(node, node, None)
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # do not move root
-        with self.assertRaises(RootNodeError):
-            await api_alt("/", "/name_1")
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # do not overwrite file
-        with self.assertRaises(NodeConflictedError):
-            await api_alt("/name_1/name_2", "/name_1/name_4")
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # do not move parent to descendant folders
-        with self.assertRaises(LineageError):
-            await api_alt("/name_1", "/name_1/name_3")
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # do not move invalid node
-        with self.assertRaises(NodeNotFoundError):
-            await api_alt("/invalid", "/name_1")
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # do not move to invalid path
-        with self.assertRaises(LineageError):
-            await api_alt("/name_1/name_2", "/invalid/invalid")
-        with self.assertRaises(LineageError):
-            await api_alt("/name_1/name_2", "./invalid/invalid")
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # move to absolute path
-        node = await self._drive.get_node_by_path("/name_1")
-        await api_alt("/name_1", "/new")
-        mock.assert_called_once_with(node, root_node, "new")
-        mock.reset_mock()
-
-        # move to relative folder
-        node1 = await self._drive.get_node_by_path("/name_1/name_2")
-        node2 = await self._drive.get_node_by_path("/name_1/name_3")
-        await api_alt("/name_1/name_2", "./name_3")
-        mock.assert_called_once_with(node1, node2, None)
-        mock.reset_mock()
-
-        # move to relative file
-        node1 = await self._drive.get_node_by_path("/name_1/name_2")
-        node2 = await self._drive.get_node_by_path("/name_1/name_3")
-        await api_alt("/name_1/name_2", "./name_3/name_4")
-        mock.assert_called_once_with(node1, node2, "name_4")
-        mock.reset_mock()
-
-        # move up
-        node = await self._drive.get_node_by_path("/name_1/name_2")
-        await api_alt("/name_1/name_2", "..")
-        mock.assert_called_once_with(node, root_node, None)
-        mock.reset_mock()
-
-    async def testTrashNode(self):
-        driver = self._driver
-        mock = driver.mock.trash_node
-        api = self._drive.trash_node
-        root_node = await driver.fetch_root_node()
-
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_1", root_node)
-        builder.commit()
-
-        async for dummy_change in self._drive.sync():
-            pass
-
-        # do not trash root node
-        with self.assertRaises(RootNodeError):
-            await api(root_node)
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # do not accept invalid node
-        with self.assertRaises(TypeError):
-            await api(cast(Node, None))
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # good call
-        node = await self._drive.get_node_by_path("/name_1")
-        assert node
-        await api(node)
-        mock.assert_called_once_with(node)
-        mock.reset_mock()
-
-    async def testDownload(self):
-        driver = self._driver
-        mock = driver.mock.download
-        api = self._drive.download
-        root_node = await driver.fetch_root_node()
-
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_1", root_node)
-        node_1 = builder.commit()
-
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_2", node_1)
-        builder.to_file(2, "hash_2", "text/plain")
-        builder.commit()
-
-        async for dummy_change in self._drive.sync():
-            pass
-
-        # do not download folder
-        node = await self._drive.get_node_by_path("/name_1")
-        assert node
-        with self.assertRaises(DownloadError):
-            await api(node)
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # do not accept invalid node
-        with self.assertRaises(TypeError):
-            await api(cast(Node, None))
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # good call
-        node = await self._drive.get_node_by_path("/name_1/name_2")
-        assert node
-        await api(node)
-        mock.assert_called_once_with(node)
-        mock.reset_mock()
-
-    async def testUpload(self):
-        driver = self._driver
-        mock = driver.mock.upload
-        api = self._drive.upload
-        root_node = await driver.fetch_root_node()
-
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_1", root_node)
-        node_1 = builder.commit()
-
-        builder = driver.pseudo.build_node()
-        builder.to_folder("name_2", node_1)
-        builder.to_file(2, "hash_2", "text/plain")
-        builder.commit()
-
-        async for dummy_change in self._drive.sync():
-            pass
-
-        # do not upload to a file
-        node = await self._drive.get_node_by_path("/name_1/name_2")
-        assert node
-        with self.assertRaises(ParentIsNotFolderError):
-            await api(node, "name_3")
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # do not conflict
-        node = await self._drive.get_node_by_path("/name_1")
-        assert node
-        with self.assertRaises(NodeConflictedError):
-            await api(node, "name_2")
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # do not accept invalid node
-        with self.assertRaises(TypeError):
-            await api(cast(Node, None), "name_3")
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # do not accept invalid name
-        with self.assertRaises(TypeError):
-            await api(node, cast(str, None))
-        mock.assert_not_called()
-        mock.reset_mock()
-
-        # good calls
-        await api(node, "name_3")
-        mock.assert_called_once_with(node, "name_3", None, None, None, None)
-        mock.reset_mock()
-
-        await api(node, "name_3", file_size=123, mime_type="test/plain")
-        mock.assert_called_once_with(
-            node,
-            "name_3",
-            123,
-            "test/plain",
-            None,
-            None,
+class SnapshotTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self._drive, self._fs, self._ss = await self.enterAsyncContext(
+            create_mocked_drive()
         )
-        mock.reset_mock()
 
-    async def testGetHasher(self):
-        driver = self._driver
-        mock = driver.mock.get_hasher
+    async def testGetRoot(self):
+        aexpect(self._ss.get_root).return_value = 42
+        rv = await self._drive.get_root()
 
-        await self._drive.get_hasher()
-        mock.assert_called_once_with()
-        mock.reset_mock()
+        self.assertEqual(rv, 42)
 
-    async def testEmptyCache(self):
-        with self.assertRaises(CacheError):
-            await self._drive.get_root_node()
+    async def testGetNodeById(self):
+        aexpect(self._ss.get_node_by_id).return_value = 42
+        rv = await self._drive.get_node_by_id("42")
 
-        node = await self._drive.get_node_by_id("not_exist")
-        self.assertIsNone(node)
+        self.assertEqual(rv, 42)
+        aexpect(self._ss.get_node_by_id).assert_awaited_once_with("42")
 
-        with self.assertRaises(CacheError):
-            await self._drive.get_node_by_path("/")
+    async def testGetNodeByPath(self):
+        aexpect(self._ss.get_node_by_path).return_value = 42
+        path = PurePath("/a/b/c")
+        rv = await self._drive.get_node_by_path(path)
 
-        node = await self._drive.get_node_by_name_from_parent_id(
-            "not_exist", "not_exist"
+        self.assertEqual(rv, 42)
+        aexpect(self._ss.get_node_by_path).assert_awaited_once_with(path)
+
+    async def testGetChildByName(self):
+        aexpect(self._ss.get_child_by_name).return_value = 42
+        parent = Mock(spec=Node)
+        parent.id = "456"
+        rv = await self._drive.get_child_by_name("123", parent)
+
+        self.assertEqual(rv, 42)
+        aexpect(self._ss.get_child_by_name).assert_awaited_once_with("123", "456")
+
+    async def testGetChildrenById(self):
+        aexpect(self._ss.get_children_by_id).return_value = 42
+        parent = Mock(spec=Node)
+        parent.id = "123"
+        rv = await self._drive.get_children(parent)
+
+        self.assertEqual(rv, 42)
+        aexpect(self._ss.get_children_by_id).assert_awaited_once_with("123")
+
+    async def testGetTrashedNodes(self):
+        aexpect(self._ss.get_trashed_nodes).return_value = []
+        rv = await self._drive.get_trashed_nodes()
+
+        self.assertEqual(rv, [])
+        aexpect(self._ss.get_trashed_nodes).assert_awaited_once_with()
+
+    async def testResolvePath(self):
+        path = Path("")
+        aexpect(self._ss.resolve_path_by_id).return_value = path
+        node = Mock(spec=Node)
+        node.id = "123"
+        rv = await self._drive.resolve_path(node)
+
+        self.assertEqual(rv, path)
+        aexpect(self._ss.resolve_path_by_id).assert_awaited_once_with("123")
+
+    async def testFindNodesByRegex(self):
+        aexpect(self._ss.find_nodes_by_regex).return_value = []
+        rv = await self._drive.find_nodes_by_regex("123")
+
+        self.assertEqual(rv, [])
+        aexpect(self._ss.find_nodes_by_regex).assert_awaited_once_with("123")
+
+
+class WalkTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self._drive, self._fs, self._ss = await self.enterAsyncContext(
+            create_mocked_drive()
         )
-        self.assertIsNone(node)
 
-        node_list = await self._drive.get_children_by_id("not_exist")
-        self.assertFalse(node_list)
+    async def testNotFolder(self):
+        node = Mock(spec=Node)
+        node.is_directory = False
 
-        node_list = await self._drive.get_trashed_nodes()
-        self.assertFalse(node_list)
+        async for _r, _d, _f in self._drive.walk(node):
+            pass
+
+        aexpect(self._ss.get_children_by_id).assert_not_awaited()
+
+    async def testSuccess(self):
+        node = Mock(spec=Node)
+        node.id = "123"
+        node.is_directory = True
+        node.is_trashed = False
+        directory = Mock(spec=Node)
+        directory.id = "456"
+        directory.is_directory = True
+        directory.is_trashed = False
+        file = Mock(spec=Node)
+        file.id = "789"
+        file.is_directory = False
+        file.is_trashed = False
+        aexpect(self._ss.get_children_by_id).side_effect = [[directory, file], []]
+
+        rv: list[object] = []
+        async for r, d, f in self._drive.walk(node):
+            rv.append((r, d, f))
+
+        self.assertEqual(rv, [(node, [directory], [file]), (directory, [], [])])
+
+
+class MoveTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self._drive, self._fs, self._ss = await self.enterAsyncContext(
+            create_mocked_drive()
+        )
+        self._move = aexpect(self._fs.move)
+
+    async def testMoveRootNode(self):
+        node = Mock(spec=Node)
+        node.is_trashed = True
+        node.id = "123"
+        aexpect(self._ss.get_root).return_value = node
+        new_parent = Mock(spec=Node)
+        new_parent.is_trashed = False
+
+        with self.assertRaises(ValueError):
+            await self._drive.move(node, new_parent=new_parent, new_name="123")
+        self._move.assert_not_awaited()
+
+    async def testUnauthorized(self):
+        node = Mock(spec=Node)
+        node.id = "123"
+        node.is_trashed = False
+        new_parent = Mock(spec=Node)
+        aexpect(self._fs.is_authorized).return_value = False
+
+        with self.assertRaises(UnauthorizedError):
+            await self._drive.move(
+                node, new_parent=new_parent, new_name="123", trashed=True
+            )
+
+    async def testNoArgs(self):
+        node = Mock(spec=Node)
+        node.id = "123"
+        node.is_trashed = False
+
+        with self.assertRaises(ValueError):
+            await self._drive.move(node)
+        self._move.assert_not_awaited()
+
+    async def testMoveToNewParent(self):
+        node = Mock(spec=Node)
+        node.id = "123"
+        node.is_trashed = False
+        new_parent = Mock(spec=Node)
+        new_parent.is_directory = True
+        new_parent.is_trashed = False
+        self._move.return_value = 42
+
+        with patch("wcpan.drive.core._drive._contains") as contains:
+            contains.return_value = False
+            rv = await self._drive.move(node, new_parent=new_parent)
+
+        self.assertEqual(rv, 42)
+        self._move.assert_awaited_once_with(
+            node, new_parent=new_parent, new_name=None, trashed=None
+        )
+
+    async def testMoveToNewName(self):
+        node = Mock(spec=Node)
+        node.id = "123"
+        node.is_trashed = False
+        self._move.return_value = 42
+
+        rv = await self._drive.move(node, new_name="456")
+
+        self.assertEqual(rv, 42)
+        self._move.assert_awaited_once_with(
+            node, new_parent=None, new_name="456", trashed=None
+        )
+
+    async def testMoveToNewParentAndNewName(self):
+        node = Mock(spec=Node)
+        node.id = "123"
+        node.is_trashed = False
+        new_parent = Mock(spec=Node)
+        new_parent.is_directory = True
+        new_parent.is_trashed = False
+        self._move.return_value = 42
+
+        with patch("wcpan.drive.core._drive._contains") as contains:
+            contains.return_value = False
+            rv = await self._drive.move(node, new_parent=new_parent, new_name="789")
+
+        self.assertEqual(rv, 42)
+        self._move.assert_awaited_once_with(
+            node, new_parent=new_parent, new_name="789", trashed=None
+        )
+
+    async def testTrash(self):
+        node = Mock(spec=Node)
+        node.id = "123"
+
+        await self._drive.move(node, trashed=True)
+        aexpect(self._fs.move).assert_awaited_once_with(
+            node, new_parent=None, new_name=None, trashed=True
+        )
+
+
+class PurgeTrashTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self._drive, self._fs, self._ss = await self.enterAsyncContext(
+            create_mocked_drive()
+        )
+
+    async def testUnauthorized(self):
+        aexpect(self._fs.is_authorized).return_value = False
+
+        with self.assertRaises(UnauthorizedError):
+            await self._drive.purge_trash()
+
+    async def testSuccess(self):
+        await self._drive.purge_trash()
+        aexpect(self._fs.purge_trash).assert_awaited_once_with()
+
+
+class CreateDirectoryTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self._drive, self._fs, self._ss = await self.enterAsyncContext(
+            create_mocked_drive()
+        )
+
+    async def testInvalidParent(self):
+        parent = Mock(spec=Node)
+        parent.is_directory = False
+
+        with self.assertRaises(ValueError):
+            await self._drive.create_directory("123", parent)
+
+    async def testInvalidName(self):
+        parent = Mock(spec=Node)
+        parent.is_directory = True
+
+        with self.assertRaises(ValueError):
+            await self._drive.create_directory("", parent)
+
+        with self.assertRaises(ValueError):
+            await self._drive.create_directory("a/b", parent)
+
+        with self.assertRaises(ValueError):
+            await self._drive.create_directory("a\\b", parent)
+
+    async def testUnauthorized(self):
+        parent = Mock(spec=Node)
+        parent.is_directory = True
+        aexpect(self._fs.is_authorized).return_value = False
+
+        with self.assertRaises(UnauthorizedError):
+            await self._drive.create_directory("123", parent)
+
+    async def testConflicted(self):
+        parent = Mock(spec=Node)
+        parent.id = "123"
+        parent.is_directory = True
+        node = Mock(spec=Node)
+        node.id = "456"
+        node.name = "aaa"
+        aexpect(self._ss.get_child_by_name).return_value = node
+
+        with self.assertRaises(NodeExistsError):
+            await self._drive.create_directory("123", parent)
+
+    async def testSuccess(self):
+        parent = Mock(spec=Node)
+        parent.id = "123"
+        parent.is_directory = True
+        aexpect(self._ss.get_child_by_name).side_effect = NodeNotFoundError("")
+        node = Mock(spec=Node)
+        node.id = "456"
+        aexpect(self._fs.create_directory).return_value = node
+
+        rv = await self._drive.create_directory("123", parent)
+
+        self.assertEqual(rv, node)
+        aexpect(self._fs.create_directory).assert_awaited_once_with(
+            "123", parent, exist_ok=False, private=None
+        )
+
+
+class DownloadFileTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self._drive, self._fs, self._ss = await self.enterAsyncContext(
+            create_mocked_drive()
+        )
+
+    async def testNotFile(self):
+        node = Mock(spec=Node)
+        node.is_directory = True
+
+        with self.assertRaises(ValueError):
+            async with self._drive.download_file(node):
+                pass
+
+    async def testUnauthorized(self):
+        node = Mock(spec=Node)
+        node.is_directory = False
+        aexpect(self._fs.is_authorized).return_value = False
+
+        with self.assertRaises(UnauthorizedError):
+            async with self._drive.download_file(node):
+                pass
+
+    async def testSuccess(self):
+        node = Mock(spec=Node)
+        node.is_directory = False
+        aexpect(self._fs.is_authorized).return_value = True
+        fin = Mock(spec=ReadableFile)
+        aexpect(self._fs.download_file).return_value.__aenter__.return_value = fin
+
+        async with self._drive.download_file(node) as rv:
+            self.assertEqual(rv, fin)
+
+        aexpect(self._fs.download_file).assert_called_once_with(node)
+
+
+class UploadFileTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self._drive, self._fs, self._ss = await self.enterAsyncContext(
+            create_mocked_drive()
+        )
+
+    async def testUnauthorized(self):
+        parent = Mock(spec=Node)
+        parent.is_directory = True
+        aexpect(self._fs.is_authorized).return_value = False
+
+        with self.assertRaises(UnauthorizedError):
+            async with self._drive.upload_file("123", parent):
+                pass
+
+    async def testNotFolder(self):
+        parent = Mock(spec=Node)
+        parent.is_directory = False
+        aexpect(self._fs.is_authorized).return_value = True
+
+        with self.assertRaises(ValueError):
+            async with self._drive.upload_file("123", parent):
+                pass
+
+    async def testInvalidName(self):
+        parent = Mock(spec=Node)
+        parent.is_directory = True
+        aexpect(self._fs.is_authorized).return_value = True
+
+        with self.assertRaises(ValueError):
+            async with self._drive.upload_file("", parent):
+                pass
+
+        with self.assertRaises(ValueError):
+            async with self._drive.upload_file("a/b", parent):
+                pass
+
+        with self.assertRaises(ValueError):
+            async with self._drive.upload_file("a\\b", parent):
+                pass
+
+    async def testConflicted(self):
+        parent = Mock(spec=Node)
+        parent.id = "123"
+        parent.is_directory = True
+        node = Mock(spec=Node)
+        node.name = "456"
+        aexpect(self._ss.get_child_by_name).return_value = node
+
+        with self.assertRaises(NodeExistsError):
+            async with self._drive.upload_file("123", parent):
+                pass
+
+    async def testSuccess(self):
+        parent = Mock(spec=Node)
+        parent.id = "123"
+        parent.is_directory = True
+        aexpect(self._fs.is_authorized).return_value = True
+        aexpect(self._ss.get_child_by_name).side_effect = NodeNotFoundError("123")
+        fout = Mock(spec=WritableFile)
+        aexpect(self._fs.upload_file).return_value.__aenter__.return_value = fout
+
+        async with self._drive.upload_file(
+            "123", parent, size=123, mime_type="text/plain"
+        ) as rv:
+            self.assertEqual(rv, fout)
+
+        aexpect(self._fs.upload_file).assert_called_once_with(
+            "123",
+            parent,
+            size=123,
+            mime_type="text/plain",
+            media_info=None,
+            private=None,
+        )
+
+
+class SyncTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self._drive, self._fs, self._ss = await self.enterAsyncContext(
+            create_mocked_drive()
+        )
+
+    async def testUnauthorized(self):
+        aexpect(self._fs.is_authorized).return_value = False
+
+        with self.assertRaises(UnauthorizedError):
+            async for _ in self._drive.sync():
+                pass
+
+    async def testResetRoot(self):
+        aexpect(self._fs.get_initial_cursor).return_value = "123"
+        aexpect(self._ss.get_current_cursor).return_value = ""
+        node = Mock(spec=Node)
+        aexpect(self._fs.get_root).return_value = node
+        changes = []
+        aexpect(self._fs.get_changes).return_value = to_async_iterable(changes)
+        async for _ in self._drive.sync():
+            pass
+
+        aexpect(self._ss.set_root).assert_awaited_once_with(node)
+
+    async def testApply(self):
+        aexpect(self._fs.get_initial_cursor).return_value = "123"
+        aexpect(self._ss.get_current_cursor).return_value = "456"
+        changes = [
+            ([(True, "123")], "789"),
+        ]
+        aexpect(self._fs.get_changes).return_value = to_async_iterable(changes)
+        rv: list[ChangeAction] = []
+        async for _ in self._drive.sync():
+            rv.append(_)
+
+        self.assertEqual(rv, [(True, "123")])
+        aexpect(self._ss.apply_changes).assert_called_once_with([(True, "123")], "789")
+
+
+def create_mocked_acm(rv: Mock) -> Mock:
+    acm = MagicMock()
+    acm.return_value.__aenter__.return_value = rv
+    acm.return_value.__aexit__.return_value = None
+    return acm
+
+
+async def to_async_iterable[T](rv: Iterable[T]) -> AsyncIterable[T]:
+    for _ in rv:
+        yield _
+
+
+@asynccontextmanager
+async def create_mocked_drive():
+    file_service = MagicMock(spec=FileService)
+    file_service.api_version = 4
+    create_file_service = create_mocked_acm(file_service)
+
+    snapshot_service = MagicMock(spec=SnapshotService)
+    snapshot_service.api_version = 4
+    create_snapshot_service = create_mocked_acm(snapshot_service)
+
+    async with create_drive(
+        file=create_file_service, snapshot=create_snapshot_service
+    ) as drive:
+        yield drive, cast(FileService, file_service), cast(
+            SnapshotService, snapshot_service
+        )
+
+
+def aexpect(unknown: object) -> AsyncMock:
+    return cast(AsyncMock, unknown)
