@@ -17,8 +17,6 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.12"
-PyYAML = "^6.0.1"
-arrow = "^1.2.3"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.11.0"
