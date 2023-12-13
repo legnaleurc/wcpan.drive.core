@@ -1,6 +1,8 @@
 from asyncio import Lock
 from contextlib import AsyncExitStack, asynccontextmanager
+from collections import deque
 from collections.abc import Sequence, AsyncIterator
+from itertools import tee
 from pathlib import PurePath
 from typing import override
 
@@ -152,26 +154,22 @@ class _DefaultDrive(Drive):
     ) -> AsyncIterator[tuple[Node, list[Node], list[Node]]]:
         if not node.is_directory:
             return
-        q = [node]
+        if node.is_trashed and not include_trashed:
+            return
+
+        q = deque([node])
         while q:
-            node = q[0]
-            del q[0]
-            if not include_trashed and node.is_trashed:
-                continue
-
+            node = q.popleft()
             children = await self.get_children(node)
-            directorys: list[Node] = []
-            files: list[Node] = []
-            for child in children:
-                if not include_trashed and child.is_trashed:
-                    continue
-                if child.is_directory:
-                    directorys.append(child)
-                else:
-                    files.append(child)
-            yield node, directorys, files
+            children = (_ for _ in children if not _.is_trashed or include_trashed)
 
-            q.extend(directorys)
+            directories, files = tee(children, 2)
+            directories = [_ for _ in directories if _.is_directory]
+            files = [_ for _ in files if not _.is_directory]
+
+            yield node, directories, files
+
+            q.extend(directories)
 
     @override
     async def create_directory(
