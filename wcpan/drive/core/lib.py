@@ -110,7 +110,7 @@ async def upload_file_from_local(
     mime_type: str | None = None,
     media_info: MediaInfo | None = None,
     timeout: float | None = None,
-) -> Node | None:
+) -> Node:
     # sanity check
     path = path.resolve()
     if not path.is_file():
@@ -130,8 +130,9 @@ async def upload_file_from_local(
     ) as fout:
         with open(path, "rb") as fin:
             await _upload_retry(fin, fout, timeout)
-
-    node = await fout.node()
+        node = await fout.node()
+    if not node:
+        raise RuntimeError("upload failed")
     return node
 
 
