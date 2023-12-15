@@ -135,11 +135,8 @@ class _DefaultDrive(Drive):
         if not ancestor_set:
             return rv
 
-        tmp: list[Node] = []
-        for node in rv:
-            if not await _in_ancestor_set(self, node, ancestor_set):
-                tmp.append(node)
-        return tmp
+        table = {_.id: _ for _ in rv}
+        return [_ for _ in rv if not _in_ancestor_set(table, _, ancestor_set)]
 
     @override
     async def find_nodes_by_regex(self, pattern: str) -> list[Node]:
@@ -339,15 +336,17 @@ class _DefaultDrive(Drive):
         return await self._fs.set_oauth_token(token)
 
 
-async def _in_ancestor_set(drive: Drive, node: Node, ancestor_set: set[str]) -> bool:
+def _in_ancestor_set(
+    table: dict[str, Node], node: Node, ancestor_set: set[str]
+) -> bool:
     if node.parent_id is None:
         return False
-    parent = await drive.get_node_by_id(node.parent_id)
+    parent = table.get(node.parent_id, None)
     if not parent:
         return False
     if parent.id in ancestor_set:
         return True
-    included = await _in_ancestor_set(drive, parent, ancestor_set)
+    included = _in_ancestor_set(table, parent, ancestor_set)
     if included:
         ancestor_set.add(parent.id)
     return included
