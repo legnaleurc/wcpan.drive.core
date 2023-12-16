@@ -61,11 +61,11 @@ type ChangeAction = RemoveAction | UpdateAction
 class MediaInfo:
     @classmethod
     def image(cls, width: int, height: int) -> Self:
-        return MediaInfo(is_image=True, width=width, height=height)
+        return cls(is_image=True, width=width, height=height)
 
     @classmethod
     def video(cls, width: int, height: int, ms_duration: int) -> Self:
-        return MediaInfo(
+        return cls(
             is_video=True,
             width=width,
             height=height,
