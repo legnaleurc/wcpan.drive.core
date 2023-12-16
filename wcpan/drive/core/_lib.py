@@ -6,7 +6,7 @@ import asyncio
 import os
 
 
-from .exceptions import IsADirectoryError, NodeExistsError, NodeNotFoundError
+from .exceptions import NodeIsADirectoryError, NodeExistsError, NodeNotFoundError
 from .types import (
     ChangeAction,
     Drive,
@@ -220,7 +220,7 @@ async def download_file_to_local(
 
     # exists but not a file
     if complete_path.exists():
-        raise IsADirectoryError(complete_path)
+        raise NodeIsADirectoryError(complete_path)
 
     # if the file is empty, no need to download
     if node.size <= 0:
@@ -237,7 +237,7 @@ async def download_file_to_local(
                 f" ({offset} > {node.size})"
             )
     elif tmp_path.exists():
-        raise IsADirectoryError(complete_path)
+        raise NodeIsADirectoryError(complete_path)
     else:
         offset = 0
 

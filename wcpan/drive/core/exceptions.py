@@ -8,7 +8,7 @@ __all__ = (
     "InvalidServiceError",
     "NodeExistsError",
     "NodeNotFoundError",
-    "IsADirectoryError",
+    "NodeIsADirectoryError",
     "UnauthorizedError",
 )
 
@@ -33,7 +33,7 @@ class NodeNotFoundError(DriveError):
         self.id = id
 
 
-class IsADirectoryError(DriveError):
+class NodeIsADirectoryError(DriveError):
     def __init__(self, path: Path) -> None:
         super().__init__(f"{path} is a directory")
         self.path = path
