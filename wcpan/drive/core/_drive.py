@@ -259,6 +259,13 @@ class _DefaultDrive(Drive):
         await self._fs.purge_trash()
 
     @override
+    async def delete(self, node: Node) -> None:
+        if not await self.is_authorized():
+            raise UnauthorizedError()
+
+        await self._fs.delete(node)
+
+    @override
     async def move(
         self,
         node: Node,

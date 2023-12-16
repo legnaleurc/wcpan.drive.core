@@ -284,6 +284,12 @@ class FileService(Service, metaclass=ABCMeta):
         """
 
     @abstractmethod
+    async def delete(self, node: Node) -> None:
+        """
+        Permanently delete the node.
+        """
+
+    @abstractmethod
     async def purge_trash(self) -> None:
         """
         Purge everything in the trash.
@@ -549,6 +555,10 @@ class Drive(metaclass=ABCMeta):
         trashed: bool | None = None,
     ) -> Node:
         """Move or rename or trash the node."""
+
+    @abstractmethod
+    async def delete(self, node: Node) -> None:
+        """Permanently delete the node."""
 
     @abstractmethod
     def sync(self) -> AsyncIterator[ChangeAction]:

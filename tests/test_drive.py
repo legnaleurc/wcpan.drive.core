@@ -321,6 +321,26 @@ class PurgeTrashTestCase(IsolatedAsyncioTestCase):
         aexpect(self._fs.purge_trash).assert_awaited_once_with()
 
 
+class DeleteTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self._drive, self._fs, self._ss = await self.enterAsyncContext(
+            create_mocked_drive()
+        )
+
+    async def testUnauthorized(self):
+        node = Mock(spec=Node)
+        aexpect(self._fs.is_authorized).return_value = False
+
+        with self.assertRaises(UnauthorizedError):
+            await self._drive.delete(node)
+
+    async def testSuccess(self):
+        node = Mock(spec=Node)
+
+        await self._drive.delete(node)
+        aexpect(self._fs.delete).assert_awaited_once_with(node)
+
+
 class CreateDirectoryTestCase(IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self._drive, self._fs, self._ss = await self.enterAsyncContext(
