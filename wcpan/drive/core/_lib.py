@@ -165,7 +165,7 @@ async def _upload_retry(
             await _upload_feed(fin, fout, timeout)
             break
         except TimeoutError:
-            getLogger(__name__).exception("upload timeout, retry")
+            getLogger(__name__).error("upload timeout, retry")
 
         await _upload_continue(fin, fout)
 
@@ -252,7 +252,7 @@ async def _download_retry(
             await _download_feed(fin, fout, timeout)
             break
         except TimeoutError:
-            getLogger(__name__).exception("download timeout, retry")
+            getLogger(__name__).error("download timeout, retry")
 
         await _download_continue(fin, fout)
 
