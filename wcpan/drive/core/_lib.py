@@ -1,4 +1,4 @@
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from logging import getLogger
 from pathlib import Path, PurePath
 from typing import BinaryIO, TypeGuard
@@ -7,7 +7,16 @@ import os
 
 
 from .exceptions import IsADirectoryError, NodeExistsError, NodeNotFoundError
-from .types import Drive, MediaInfo, Node, ReadableFile, WritableFile, ChangeAction, UpdateAction, RemoveAction
+from .types import (
+    ChangeAction,
+    Drive,
+    MediaInfo,
+    Node,
+    ReadableFile,
+    RemoveAction,
+    UpdateAction,
+    WritableFile,
+)
 
 
 _DEFAULT_FILE_MIME_TYPE = "application/octet-stream"
@@ -279,9 +288,25 @@ async def _download_continue(fin: ReadableFile, fout: BinaryIO) -> None:
     await fin.seek(offset)
 
 
-def is_remove(change: ChangeAction) -> TypeGuard[RemoveAction]:
+def is_remove(change: ChangeAction, /) -> TypeGuard[RemoveAction]:
     return change[0]
 
 
-def is_update(change: ChangeAction) -> TypeGuard[UpdateAction]:
+def is_update(change: ChangeAction, /) -> TypeGuard[UpdateAction]:
     return not change[0]
+
+
+def dispatch_change[
+    R
+](
+    change: ChangeAction,
+    /,
+    *,
+    on_remove: Callable[[str], R],
+    on_update: Callable[[Node], R],
+) -> R:
+    match change:
+        case (True, id_):
+            return on_remove(id_)
+        case (False, node):
+            return on_update(node)

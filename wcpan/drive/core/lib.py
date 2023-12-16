@@ -1,4 +1,5 @@
 from ._lib import (
+    dispatch_change as dispatch_change,
     download_file_to_local as download_file_to_local,
     else_none as else_none,
     find_duplicate_nodes as find_duplicate_nodes,
@@ -10,6 +11,7 @@ from ._lib import (
 
 
 __all__ = (
+    "dispatch_change",
     "download_file_to_local",
     "else_none",
     "find_duplicate_nodes",
