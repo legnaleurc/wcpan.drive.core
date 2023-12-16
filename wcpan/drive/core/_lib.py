@@ -1,13 +1,13 @@
 from collections.abc import Awaitable
 from logging import getLogger
 from pathlib import Path, PurePath
-from typing import BinaryIO
+from typing import BinaryIO, TypeGuard
 import asyncio
 import os
 
 
 from .exceptions import IsADirectoryError, NodeExistsError, NodeNotFoundError
-from .types import Drive, MediaInfo, Node, ReadableFile, WritableFile
+from .types import Drive, MediaInfo, Node, ReadableFile, WritableFile, ChangeAction, UpdateAction, RemoveAction
 
 
 _DEFAULT_FILE_MIME_TYPE = "application/octet-stream"
@@ -277,3 +277,11 @@ async def _download_continue(fin: ReadableFile, fout: BinaryIO) -> None:
     fout.flush()
     offset = fout.tell()
     await fin.seek(offset)
+
+
+def is_remove(change: ChangeAction) -> TypeGuard[RemoveAction]:
+    return change[0]
+
+
+def is_update(change: ChangeAction) -> TypeGuard[UpdateAction]:
+    return not change[0]
