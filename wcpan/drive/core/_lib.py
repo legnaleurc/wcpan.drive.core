@@ -154,8 +154,6 @@ async def upload_file_from_local(
         with open(path, "rb") as fin:
             await _upload_retry(fin, fout, timeout)
         node = await fout.node()
-    if not node:
-        raise RuntimeError("upload failed")
     return node
 
 

@@ -203,9 +203,12 @@ class WritableFile(metaclass=ABCMeta):
         """
 
     @abstractmethod
-    async def node(self) -> Node | None:
+    async def node(self) -> Node:
         """
-        Get the wrote node. May be `None` if write failed.
+        Get the wrote node.
+
+        Raises:
+        NodeNotFoundError if failed.
         """
 
 
