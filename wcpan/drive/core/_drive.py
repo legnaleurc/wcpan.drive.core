@@ -47,12 +47,15 @@ async def create_drive(
     file_middleware: Sequence[CreateFileServiceMiddleware] | None = None,
     snapshot_middleware: Sequence[CreateSnapshotServiceMiddleware] | None = None,
 ) -> AsyncIterator[Drive]:
-    async with _create_service(
-        create_service=snapshot,
-        middleware_list=snapshot_middleware,
-    ) as snapshot_service, _create_service(
-        create_service=file, middleware_list=file_middleware
-    ) as file_service:
+    async with (
+        _create_service(
+            create_service=snapshot,
+            middleware_list=snapshot_middleware,
+        ) as snapshot_service,
+        _create_service(
+            create_service=file, middleware_list=file_middleware
+        ) as file_service,
+    ):
         yield _DefaultDrive(
             file_service=file_service, snapshot_service=snapshot_service
         )
