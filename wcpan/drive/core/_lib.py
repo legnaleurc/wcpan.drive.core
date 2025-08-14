@@ -139,6 +139,7 @@ async def upload_file_from_local(
     path: Path,
     parent: Node,
     *,
+    name: str | None = None,
     mime_type: str | None = None,
     media_info: MediaInfo | None = None,
     timeout: float | None = None,
@@ -148,7 +149,7 @@ async def upload_file_from_local(
     if not path.is_file():
         raise ValueError("invalid file")
 
-    file_name = path.name
+    file_name = path.name if name is None else name
     total_file_size = path.stat().st_size
     if not mime_type:
         mime_type = _DEFAULT_FILE_MIME_TYPE
