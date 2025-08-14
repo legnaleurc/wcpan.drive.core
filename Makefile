@@ -21,7 +21,7 @@ clean:
 	$(RM) ./dist ./build ./*.egg-info
 
 purge: clean
-	$(RM) -rf $(ENV_DIR)
+	$(RM) $(ENV_DIR)
 
 test: venv
 	$(PYTHON) -m compileall wcpan
