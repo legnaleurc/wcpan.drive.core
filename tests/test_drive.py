@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 from wcpan.drive.core._drive import create_drive
 from wcpan.drive.core.exceptions import (
+    AuthenticationError,
     NodeExistsError,
     NodeNotFoundError,
-    UnauthorizedError,
 )
 from wcpan.drive.core.types import (
     ChangeAction,
@@ -67,22 +67,16 @@ class AuthTestCase(IsolatedAsyncioTestCase):
             create_mocked_drive()
         )
 
-    async def testGetOauthUrl(self):
-        aexpect(self._fs.get_oauth_url).return_value = 42
-        rv = await self._drive.get_oauth_url()
-
-        self.assertEqual(rv, 42)
-
-    async def testIsAuthorized(self):
-        aexpect(self._fs.is_authorized).return_value = True
-        rv = await self._drive.is_authorized()
+    async def testIsAuthenticated(self):
+        aexpect(self._fs.is_authenticated).return_value = True
+        rv = await self._drive.is_authenticated()
 
         self.assertTrue(rv)
 
-    async def testSetOauthToken(self):
-        await self._drive.set_oauth_token("42")
+    async def testAuthenticate(self):
+        await self._drive.authenticate()
 
-        aexpect(self._fs.set_oauth_token).assert_awaited_once_with("42")
+        aexpect(self._fs.authenticate).assert_awaited_once_with()
 
 
 class GetHasherTestCase(IsolatedAsyncioTestCase):
@@ -229,9 +223,9 @@ class MoveTestCase(IsolatedAsyncioTestCase):
         node.id = "123"
         node.is_trashed = False
         new_parent = Mock(spec=Node)
-        aexpect(self._fs.is_authorized).return_value = False
+        aexpect(self._fs.is_authenticated).return_value = False
 
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaises(AuthenticationError):
             await self._drive.move(
                 node, new_parent=new_parent, new_name="123", trashed=True
             )
@@ -311,9 +305,9 @@ class PurgeTrashTestCase(IsolatedAsyncioTestCase):
         )
 
     async def testUnauthorized(self):
-        aexpect(self._fs.is_authorized).return_value = False
+        aexpect(self._fs.is_authenticated).return_value = False
 
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaises(AuthenticationError):
             await self._drive.purge_trash()
 
     async def testSuccess(self):
@@ -329,9 +323,9 @@ class DeleteTestCase(IsolatedAsyncioTestCase):
 
     async def testUnauthorized(self):
         node = Mock(spec=Node)
-        aexpect(self._fs.is_authorized).return_value = False
+        aexpect(self._fs.is_authenticated).return_value = False
 
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaises(AuthenticationError):
             await self._drive.delete(node)
 
     async def testSuccess(self):
@@ -370,9 +364,9 @@ class CreateDirectoryTestCase(IsolatedAsyncioTestCase):
     async def testUnauthorized(self):
         parent = Mock(spec=Node)
         parent.is_directory = True
-        aexpect(self._fs.is_authorized).return_value = False
+        aexpect(self._fs.is_authenticated).return_value = False
 
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaises(AuthenticationError):
             await self._drive.create_directory("123", parent)
 
     async def testConflicted(self):
@@ -421,16 +415,16 @@ class DownloadFileTestCase(IsolatedAsyncioTestCase):
     async def testUnauthorized(self):
         node = Mock(spec=Node)
         node.is_directory = False
-        aexpect(self._fs.is_authorized).return_value = False
+        aexpect(self._fs.is_authenticated).return_value = False
 
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaises(AuthenticationError):
             async with self._drive.download_file(node):
                 pass
 
     async def testSuccess(self):
         node = Mock(spec=Node)
         node.is_directory = False
-        aexpect(self._fs.is_authorized).return_value = True
+        aexpect(self._fs.is_authenticated).return_value = True
         fin = Mock(spec=ReadableFile)
         aexpect(self._fs.download_file).return_value.__aenter__.return_value = fin
 
@@ -449,16 +443,16 @@ class UploadFileTestCase(IsolatedAsyncioTestCase):
     async def testUnauthorized(self):
         parent = Mock(spec=Node)
         parent.is_directory = True
-        aexpect(self._fs.is_authorized).return_value = False
+        aexpect(self._fs.is_authenticated).return_value = False
 
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaises(AuthenticationError):
             async with self._drive.upload_file("123", parent):
                 pass
 
     async def testNotFolder(self):
         parent = Mock(spec=Node)
         parent.is_directory = False
-        aexpect(self._fs.is_authorized).return_value = True
+        aexpect(self._fs.is_authenticated).return_value = True
 
         with self.assertRaises(ValueError):
             async with self._drive.upload_file("123", parent):
@@ -467,7 +461,7 @@ class UploadFileTestCase(IsolatedAsyncioTestCase):
     async def testInvalidName(self):
         parent = Mock(spec=Node)
         parent.is_directory = True
-        aexpect(self._fs.is_authorized).return_value = True
+        aexpect(self._fs.is_authenticated).return_value = True
 
         with self.assertRaises(ValueError):
             async with self._drive.upload_file("", parent):
@@ -497,7 +491,7 @@ class UploadFileTestCase(IsolatedAsyncioTestCase):
         parent = Mock(spec=Node)
         parent.id = "123"
         parent.is_directory = True
-        aexpect(self._fs.is_authorized).return_value = True
+        aexpect(self._fs.is_authenticated).return_value = True
         aexpect(self._ss.get_child_by_name).side_effect = NodeNotFoundError("123")
         fout = Mock(spec=WritableFile)
         aexpect(self._fs.upload_file).return_value.__aenter__.return_value = fout
@@ -524,9 +518,9 @@ class SyncTestCase(IsolatedAsyncioTestCase):
         )
 
     async def testUnauthorized(self):
-        aexpect(self._fs.is_authorized).return_value = False
+        aexpect(self._fs.is_authenticated).return_value = False
 
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaises(AuthenticationError):
             async for _ in self._drive.sync():
                 pass
 

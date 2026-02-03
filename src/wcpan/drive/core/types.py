@@ -362,21 +362,40 @@ class FileService(Service, metaclass=ABCMeta):
         """
 
     @abstractmethod
-    async def is_authorized(self) -> bool:
+    async def is_authenticated(self) -> bool:
         """
-        Is OAuth 2.0 authorized.
+        Check if the service is authenticated and ready for operations.
+
+        Returns True if the service has valid authentication credentials/tokens
+        and can make authenticated requests. Returns False otherwise.
+
+        This method should check cached authentication state without performing
+        I/O if possible. Implementations may validate cached tokens or credentials
+        without making network requests.
         """
 
     @abstractmethod
-    async def get_oauth_url(self) -> str:
+    async def authenticate(self) -> None:
         """
-        Get OAuth 2.0 URL.
-        """
+        Authenticate the service for use.
 
-    @abstractmethod
-    async def set_oauth_token(self, token: str) -> None:
-        """
-        Set OAuth 2.0 token.
+        This method establishes authentication for the service. The specific
+        authentication mechanism is implementation-dependent:
+        - OAuth 2.0 (tokens provided through implementation-specific methods)
+        - API key validation
+        - Username/password credentials
+        - Service account authentication
+
+        Implementations are responsible for:
+        1. Managing their own token/credential storage
+        2. Handling token refresh/renewal if applicable
+        3. Raising exceptions if authentication fails
+
+        Raises:
+            AuthenticationError: If authentication fails
+
+        Note: This method is NOT interactive. OAuth implementations should
+        handle token exchange separately before calling this method.
         """
 
 
@@ -572,13 +591,21 @@ class Drive(metaclass=ABCMeta):
         """Get a Hasher instance for checksum calculation."""
 
     @abstractmethod
-    async def is_authorized(self) -> bool:
-        """Is the drive authorized."""
+    async def is_authenticated(self) -> bool:
+        """
+        Check if the drive is authenticated and ready for operations.
+
+        Returns True if authenticated, False otherwise.
+        """
 
     @abstractmethod
-    async def get_oauth_url(self) -> str:
-        """Get OAuth 2.0 URL"""
+    async def authenticate(self) -> None:
+        """
+        Authenticate the drive for use.
 
-    @abstractmethod
-    async def set_oauth_token(self, token: str) -> None:
-        """Set OAuth 2.0 token"""
+        This delegates to the underlying FileService's authentication.
+        See FileService.authenticate() for details.
+
+        Raises:
+            AuthenticationError: If authentication fails
+        """

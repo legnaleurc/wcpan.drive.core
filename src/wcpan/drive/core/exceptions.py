@@ -9,7 +9,7 @@ __all__ = (
     "NodeExistsError",
     "NodeNotFoundError",
     "NodeIsADirectoryError",
-    "UnauthorizedError",
+    "AuthenticationError",
 )
 
 
@@ -39,5 +39,7 @@ class NodeIsADirectoryError(DriveError):
         self.path = path
 
 
-class UnauthorizedError(DriveError):
+class AuthenticationError(DriveError):
+    """Raised when authentication fails or is required but missing."""
+
     pass

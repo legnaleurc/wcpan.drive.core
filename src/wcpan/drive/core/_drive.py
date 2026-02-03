@@ -12,9 +12,9 @@ from ._lib import (
     normalize_path,
 )
 from .exceptions import (
+    AuthenticationError,
     InvalidServiceError,
     NodeExistsError,
-    UnauthorizedError,
 )
 from .types import (
     ChangeAction,
@@ -184,8 +184,8 @@ class _DefaultDrive(Drive):
             raise ValueError("directory name is empty")
         if not is_valid_name(name):
             raise ValueError("no `/` or `\\` allowed in directory name")
-        if not await self.is_authorized():
-            raise UnauthorizedError()
+        if not await self.is_authenticated():
+            raise AuthenticationError()
 
         if not exist_ok:
             node = await else_none(
@@ -210,8 +210,8 @@ class _DefaultDrive(Drive):
         # sanity check
         if node.is_directory:
             raise ValueError("node should be a file")
-        if not await self.is_authorized():
-            raise UnauthorizedError()
+        if not await self.is_authenticated():
+            raise AuthenticationError()
 
         async with self._fs.download_file(node) as file:
             yield file
@@ -234,8 +234,8 @@ class _DefaultDrive(Drive):
             raise ValueError("directory name is empty")
         if not is_valid_name(name):
             raise ValueError("no `/` or `\\` allowed in directory name")
-        if not await self.is_authorized():
-            raise UnauthorizedError()
+        if not await self.is_authenticated():
+            raise AuthenticationError()
 
         node = await else_none(self.get_child_by_name(name, parent))
         if node:
@@ -254,15 +254,15 @@ class _DefaultDrive(Drive):
     @override
     async def purge_trash(self) -> None:
         # sanity check
-        if not await self.is_authorized():
-            raise UnauthorizedError()
+        if not await self.is_authenticated():
+            raise AuthenticationError()
 
         await self._fs.purge_trash()
 
     @override
     async def delete(self, node: Node) -> None:
-        if not await self.is_authorized():
-            raise UnauthorizedError()
+        if not await self.is_authenticated():
+            raise AuthenticationError()
 
         await self._fs.delete(node)
 
@@ -276,8 +276,8 @@ class _DefaultDrive(Drive):
         trashed: bool | None = None,
     ) -> Node:
         # sanity check
-        if not await self.is_authorized():
-            raise UnauthorizedError()
+        if not await self.is_authenticated():
+            raise AuthenticationError()
 
         if not new_parent and not new_name and trashed is None:
             raise ValueError("nothing to move")
@@ -306,8 +306,8 @@ class _DefaultDrive(Drive):
 
     @override
     async def sync(self) -> AsyncIterator[ChangeAction]:
-        if not await self.is_authorized():
-            raise UnauthorizedError()
+        if not await self.is_authenticated():
+            raise AuthenticationError()
 
         async with self._sync_lock:
             initial_cursor = await self._fs.get_initial_cursor()
@@ -332,16 +332,12 @@ class _DefaultDrive(Drive):
         return await self._fs.get_hasher_factory()
 
     @override
-    async def is_authorized(self) -> bool:
-        return await self._fs.is_authorized()
+    async def is_authenticated(self) -> bool:
+        return await self._fs.is_authenticated()
 
     @override
-    async def get_oauth_url(self) -> str:
-        return await self._fs.get_oauth_url()
-
-    @override
-    async def set_oauth_token(self, token: str):
-        return await self._fs.set_oauth_token(token)
+    async def authenticate(self) -> None:
+        return await self._fs.authenticate()
 
 
 def _in_ancestor_set(
