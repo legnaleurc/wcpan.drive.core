@@ -1,20 +1,20 @@
 from asyncio import Lock
-from contextlib import AsyncExitStack, asynccontextmanager
 from collections import deque
-from collections.abc import Sequence, AsyncIterator
+from collections.abc import AsyncIterator, Sequence
+from contextlib import AsyncExitStack, asynccontextmanager
 from itertools import tee
 from pathlib import PurePath
 from typing import override
 
-from .exceptions import (
-    InvalidServiceError,
-    NodeExistsError,
-    UnauthorizedError,
-)
 from ._lib import (
     else_none,
     is_valid_name,
     normalize_path,
+)
+from .exceptions import (
+    InvalidServiceError,
+    NodeExistsError,
+    UnauthorizedError,
 )
 from .types import (
     ChangeAction,
@@ -62,9 +62,7 @@ async def create_drive(
 
 
 @asynccontextmanager
-async def _create_service[
-    T: Service
-](
+async def _create_service[T: Service](
     create_service: CreateService[T],
     middleware_list: Sequence[CreateServiceMiddleware[T]] | None,
 ):

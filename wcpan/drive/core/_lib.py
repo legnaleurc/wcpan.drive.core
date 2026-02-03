@@ -1,12 +1,11 @@
+import asyncio
+import os
 from collections.abc import Awaitable, Callable
 from logging import getLogger
 from pathlib import Path, PurePath
 from typing import BinaryIO, TypeGuard
-import asyncio
-import os
 
-
-from .exceptions import NodeIsADirectoryError, NodeExistsError, NodeNotFoundError
+from .exceptions import NodeExistsError, NodeIsADirectoryError, NodeNotFoundError
 from .types import (
     ChangeAction,
     Drive,
@@ -297,9 +296,7 @@ def is_update(change: ChangeAction, /) -> TypeGuard[UpdateAction]:
     return not change[0]
 
 
-def dispatch_change[
-    R
-](
+def dispatch_change[R](
     change: ChangeAction,
     /,
     *,

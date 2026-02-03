@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path, PurePath
 from typing import AsyncIterable, cast
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import MagicMock, Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 from wcpan.drive.core._drive import create_drive
 from wcpan.drive.core.exceptions import (
@@ -582,8 +582,10 @@ async def create_mocked_drive():
     async with create_drive(
         file=create_file_service, snapshot=create_snapshot_service
     ) as drive:
-        yield drive, cast(FileService, file_service), cast(
-            SnapshotService, snapshot_service
+        yield (
+            drive,
+            cast(FileService, file_service),
+            cast(SnapshotService, snapshot_service),
         )
 
 

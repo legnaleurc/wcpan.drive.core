@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from collections.abc import (
-    AsyncIterator,
     AsyncIterable,
+    AsyncIterator,
     Awaitable,
     Callable,
 )
