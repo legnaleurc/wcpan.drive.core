@@ -6,15 +6,15 @@ from itertools import tee
 from pathlib import PurePath
 from typing import override
 
-from ._lib import (
-    else_none,
-    is_valid_name,
-    normalize_path,
-)
 from .exceptions import (
     AuthenticationError,
     InvalidServiceError,
     NodeExistsError,
+)
+from .lib import (
+    else_none,
+    is_valid_name,
+    normalize_path,
 )
 from .types import (
     ChangeAction,

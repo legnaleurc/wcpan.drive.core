@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from wcpan.drive.core._lib import is_valid_name
+from wcpan.drive.core.lib import is_valid_name
 
 
 class TestUtilities(TestCase):
