@@ -1,3 +1,33 @@
+"""Core type definitions and abstract interfaces for cloud drive operations.
+
+This module defines the foundational types, data structures, and abstract
+interfaces that form the wcpan.drive.core API. All implementations must
+adhere to these contracts.
+
+Key Concepts:
+    - Node: Immutable representation of files and directories
+    - Drive: High-level interface for drive operations
+    - FileService: Backend implementation for cloud storage APIs
+    - SnapshotService: Local cache for node metadata
+    - MediaInfo: Metadata for image and video files
+
+The module follows a layered architecture:
+    1. Drive (public API) - User-facing operations
+    2. FileService + SnapshotService - Backend implementations
+    3. Node + MediaInfo - Data representations
+
+Thread Safety:
+    All interfaces are designed for async/await usage. Implementations
+    should handle concurrent access appropriately.
+
+Example:
+    Basic usage pattern::
+
+        >>> async with create_drive(file=my_file_service, snapshot=my_snapshot) as drive:
+        ...     root = await drive.get_root()
+        ...     files = await drive.get_children(root)
+"""
+
 from abc import ABCMeta, abstractmethod
 from collections.abc import (
     AsyncIterable,
@@ -31,10 +61,58 @@ __all__ = (
 
 
 type PrivateDict = dict[str, str]
+"""Service-specific metadata dictionary for custom attributes.
+
+Implementations can store arbitrary string key-value pairs to support
+service-specific features not covered by the standard Node attributes.
+For example, sharing permissions, labels, or custom properties.
+"""
 
 
 @dataclass(frozen=True, kw_only=True)
 class Node:
+    """Immutable representation of a file or directory in the cloud drive.
+
+    Node is the core data structure representing both files and directories.
+    All attributes are immutable - to modify a node, use Drive methods which
+    return new Node instances with updated values.
+
+    Attributes:
+        id: Unique identifier for this node assigned by the service.
+        parent_id: ID of the parent directory, or None for root node.
+        name: Name of the file or directory (without path).
+        is_directory: True if this node represents a directory.
+        is_trashed: True if this node is in the trash.
+        ctime: Creation timestamp.
+        mtime: Last modification timestamp.
+        mime_type: MIME type string (e.g., "image/jpeg", "video/mp4").
+        hash: Content hash for files, empty string for directories.
+        size: File size in bytes, 0 for directories.
+        is_image: True if this is an image file with media metadata.
+        is_video: True if this is a video file with media metadata.
+        width: Image/video width in pixels, 0 if not applicable.
+        height: Image/video height in pixels, 0 if not applicable.
+        ms_duration: Video duration in milliseconds, 0 if not applicable.
+        private: Service-specific metadata, or None if not used.
+
+    Note:
+        Node is frozen (immutable). To change properties, use Drive.move()
+        or other Drive methods which return new Node instances.
+
+    Example:
+        Accessing node properties::
+
+            >>> node = await drive.get_node_by_path(PurePath("/photos/image.jpg"))
+            >>> print(f"{node.name}: {node.size} bytes")
+            >>> if node.is_image:
+            ...     print(f"Dimensions: {node.width}x{node.height}")
+
+        Checking if node is root::
+
+            >>> root = await drive.get_root()
+            >>> is_root = node.parent_id is None
+    """
+
     id: str
     parent_id: str | None
     name: str
@@ -54,17 +132,131 @@ class Node:
 
 
 type RemoveAction = tuple[Literal[True], str]
+"""Change action representing a removed node.
+
+A tuple of (True, node_id) indicating that the node with the given ID
+was removed from the drive.
+
+Example:
+    Pattern matching on RemoveAction::
+
+        >>> if change[0]:  # RemoveAction
+        ...     removed, node_id = change
+        ...     print(f"Node removed: {node_id}")
+"""
+
+
 type UpdateAction = tuple[Literal[False], Node]
+"""Change action representing an updated or added node.
+
+A tuple of (False, node) indicating that the node was either newly created
+or had its metadata updated.
+
+Example:
+    Pattern matching on UpdateAction::
+
+        >>> if not change[0]:  # UpdateAction
+        ...     updated, node = change
+        ...     print(f"Node updated: {node.name}")
+"""
+
+
 type ChangeAction = RemoveAction | UpdateAction
+"""Union of change actions returned by drive synchronization.
+
+Represents either a node removal (RemoveAction) or node update (UpdateAction).
+Use type guard functions is_remove() and is_update() for type-safe handling.
+
+Example:
+    Using type guards::
+
+        >>> from wcpan.drive.core.lib import is_remove, is_update
+        >>> async for change in drive.sync():
+        ...     if is_remove(change):
+        ...         removed, node_id = change
+        ...         print(f"Removed: {node_id}")
+        ...     elif is_update(change):
+        ...         updated, node = change
+        ...         print(f"Updated: {node.name}")
+
+    Using dispatch helper::
+
+        >>> from wcpan.drive.core.lib import dispatch_change
+        >>> result = dispatch_change(
+        ...     change,
+        ...     on_remove=lambda id: print(f"Removed {id}"),
+        ...     on_update=lambda node: print(f"Updated {node.name}"),
+        ... )
+"""
 
 
 class MediaInfo:
+    """Media metadata for image and video files.
+
+    Encapsulates dimension and duration information for media files.
+    Use the factory methods image() or video() to create instances with
+    appropriate metadata.
+
+    Factory Methods:
+        image(width, height): Create metadata for an image file.
+        video(width, height, ms_duration): Create metadata for a video file.
+
+    Properties:
+        is_image: True if this represents image metadata.
+        is_video: True if this represents video metadata.
+        width: Width in pixels.
+        height: Height in pixels.
+        ms_duration: Duration in milliseconds (video only).
+
+    Example:
+        Creating image metadata::
+
+            >>> media = MediaInfo.image(width=1920, height=1080)
+            >>> await upload_file_from_local(
+            ...     drive,
+            ...     path,
+            ...     parent,
+            ...     mime_type="image/jpeg",
+            ...     media_info=media,
+            ... )
+
+        Creating video metadata::
+
+            >>> media = MediaInfo.video(width=1920, height=1080, ms_duration=120000)
+            >>> await upload_file_from_local(
+            ...     drive,
+            ...     path,
+            ...     parent,
+            ...     mime_type="video/mp4",
+            ...     media_info=media,
+            ... )
+    """
+
     @classmethod
     def image(cls, width: int, height: int) -> Self:
+        """Create MediaInfo for an image file.
+
+        Args:
+            width: Image width in pixels.
+            height: Image height in pixels.
+
+        Returns:
+            MediaInfo instance with is_image=True.
+        """
         return cls(is_image=True, width=width, height=height)
 
     @classmethod
     def video(cls, width: int, height: int, ms_duration: int) -> Self:
+        """Create MediaInfo for a video file.
+
+        Args:
+            width: Video width in pixels.
+            height: Video height in pixels.
+            ms_duration: Video duration in milliseconds.
+
+        Returns:
+            MediaInfo instance with is_video=True.
+        """
         return cls(
             is_video=True,
             width=width,
@@ -96,150 +288,561 @@ class MediaInfo:
 
     @property
     def is_image(self) -> bool:
+        """True if this represents image metadata."""
         return self._is_image
 
     @property
     def is_video(self) -> bool:
+        """True if this represents video metadata."""
         return self._is_video
 
     @property
     def width(self) -> int:
+        """Width in pixels, or 0 if not applicable."""
         return self._width
 
     @property
     def height(self) -> int:
+        """Height in pixels, or 0 if not applicable."""
         return self._height
 
     @property
     def ms_duration(self) -> int:
+        """Duration in milliseconds for video, or 0 if not applicable."""
         return self._ms_duration
 
 
 class ReadableFile(AsyncIterable[bytes], metaclass=ABCMeta):
-    """
-    An async readable file interface.
+    """Async readable file interface for downloading cloud files.
+
+    Provides sequential and seekable read access to cloud file content.
+    Returned by Drive.download_file() and FileService.download_file()
+    as an async context manager.
+
+    This interface extends AsyncIterable[bytes], allowing iteration over
+    file chunks.
+
+    Thread Safety:
+        Not thread-safe. Each ReadableFile instance should be used from
+        a single async task.
+
+    Example:
+        Basic download pattern::
+
+            >>> async with drive.download_file(node) as file:
+            ...     data = await file.read(8192)
+            ...     while data:
+            ...         process(data)
+            ...         data = await file.read(8192)
+
+        Using as async iterator::
+
+            >>> async with drive.download_file(node) as file:
+            ...     async for chunk in file:
+            ...         process(chunk)
+
+        Seeking and resuming::
+
+            >>> async with drive.download_file(node) as file:
+            ...     await file.seek(1024)  # Skip first 1KB
+            ...     data = await file.read(4096)
     """
 
     @abstractmethod
     async def read(self, length: int) -> bytes:
-        """
-        Read at most `length` bytes.
+        """Read at most length bytes from the file.
+
+        Reads up to the specified number of bytes from the current position.
+        Returns fewer bytes if EOF is reached.
+
+        Args:
+            length: Maximum number of bytes to read.
+
+        Returns:
+            Bytes read from the file. Empty bytes object indicates EOF.
+
+        Example:
+            Reading in chunks::
+
+                >>> chunk = await file.read(8192)
+                >>> if chunk:
+                ...     print(f"Read {len(chunk)} bytes")
         """
 
     @abstractmethod
     async def seek(self, offset: int) -> int:
-        """
-        Seek to `offset` position. Always starts from the begining.
+        """Seek to the specified position in the file.
+
+        Moves the file pointer to the given absolute offset from the
+        beginning of the file. Subsequent reads will start from this position.
+
+        Args:
+            offset: Absolute byte offset from the beginning of the file.
+
+        Returns:
+            The new absolute position.
+
+        Example:
+            Resume download from specific position::
+
+                >>> await file.seek(1048576)  # Seek to 1MB
+                >>> data = await file.read(8192)
         """
 
     @abstractmethod
     async def node(self) -> Node:
-        """
-        Get the node being read.
+        """Get the Node being read.
+
+        Returns the Node instance representing the file being downloaded.
+        Useful for accessing metadata during download.
+
+        Returns:
+            The Node instance for this file.
+
+        Example:
+            Accessing node during download::
+
+                >>> async with drive.download_file(node) as file:
+                ...     current_node = await file.node()
+                ...     print(f"Downloading: {current_node.name}")
         """
 
 
 class Hasher(metaclass=ABCMeta):
-    """
-    Hash calculator.
+    """Hash calculator for file integrity verification.
+
+    Provides streaming hash calculation compatible with the cloud service's
+    hash algorithm. Implementations must match the hashing method used by
+    the specific cloud storage backend.
+
+    Supports incremental updates for efficient hashing of large files
+    and can be copied mid-stream for checkpointing.
+
+    Example:
+        Computing file hash::
+
+            >>> hasher_factory = await drive.get_hasher_factory()
+            >>> hasher = await hasher_factory()
+            >>> with open("file.txt", "rb") as f:
+            ...     while chunk := f.read(8192):
+            ...         await hasher.update(chunk)
+            >>> file_hash = await hasher.hexdigest()
+
+        Using copy for checkpointing::
+
+            >>> hasher1 = await hasher_factory()
+            >>> await hasher1.update(b"data")
+            >>> hasher2 = await hasher1.copy()
+            >>> await hasher1.update(b"more")
+            >>> await hasher2.update(b"different")
+            >>> hash1 = await hasher1.hexdigest()
+            >>> hash2 = await hasher2.hexdigest()
     """
 
     @abstractmethod
     async def update(self, data: bytes) -> None:
-        """
-        Put `data` into the stream.
+        """Feed data into the hash calculation.
+
+        Updates the hash with the provided data. Can be called multiple
+        times to process data incrementally.
+
+        Args:
+            data: Bytes to include in the hash calculation.
+
+        Example:
+            Incremental hashing::
+
+                >>> await hasher.update(b"Hello ")
+                >>> await hasher.update(b"World")
+                >>> digest = await hasher.hexdigest()
         """
 
     @abstractmethod
     async def digest(self) -> bytes:
-        """
-        Get raw digest.
+        """Get the raw binary hash digest.
+
+        Returns the hash as raw bytes. The length depends on the hash
+        algorithm (e.g., 16 bytes for MD5, 32 bytes for SHA-256).
+
+        Returns:
+            Raw binary hash digest.
+
+        Example:
+            Getting binary digest::
+
+                >>> raw_hash = await hasher.digest()
+                >>> print(f"Hash length: {len(raw_hash)} bytes")
         """
 
     @abstractmethod
     async def hexdigest(self) -> str:
-        """
-        Get hex digest.
+        """Get the hexadecimal hash digest.
+
+        Returns the hash as a lowercase hexadecimal string, which is
+        typically used for comparison with Node.hash values.
+
+        Returns:
+            Hexadecimal string representation of the hash.
+
+        Example:
+            Comparing with node hash::
+
+                >>> computed = await hasher.hexdigest()
+                >>> if computed == node.hash:
+                ...     print("Hash matches!")
         """
 
     @abstractmethod
     async def copy(self) -> Self:
-        """
-        Return a copy to self.
+        """Create an independent copy of this hasher.
+
+        Returns a new Hasher instance with the same internal state,
+        allowing divergent hash calculations from the same checkpoint.
+
+        Returns:
+            New Hasher instance with copied state.
+
+        Example:
+            Checkpointing hash calculation::
+
+                >>> checkpoint = await hasher.copy()
+                >>> await hasher.update(b"path1")
+                >>> await checkpoint.update(b"path2")
         """
 
 
 type CreateHasher = Callable[[], Awaitable[Hasher]]
+"""Factory function type for creating Hasher instances.
+
+Returns an awaitable that produces a new Hasher. Obtained from
+Drive.get_hasher_factory() or FileService.get_hasher_factory().
+
+Example:
+    Using hasher factory::
+
+        >>> hasher_factory = await drive.get_hasher_factory()
+        >>> hasher = await hasher_factory()
+        >>> await hasher.update(data)
+"""
 
 
 class WritableFile(metaclass=ABCMeta):
-    """
-    An async writable file interface.
+    """Async writable file interface for uploading files to cloud storage.
+
+    Provides sequential and seekable write access for uploading content.
+    Returned by Drive.upload_file() and FileService.upload_file() as an
+    async context manager.
+
+    Supports resumable uploads through seek() and tell() for recovering
+    from interruptions.
+
+    Thread Safety:
+        Not thread-safe. Each WritableFile instance should be used from
+        a single async task.
+
+    Example:
+        Basic upload pattern::
+
+            >>> async with drive.upload_file("file.txt", parent, size=1024) as file:
+            ...     with open("local.txt", "rb") as f:
+            ...         chunk = f.read(8192)
+            ...         while chunk:
+            ...             await file.write(chunk)
+            ...             chunk = f.read(8192)
+            ...     await file.flush()
+            ...     node = await file.node()
+
+        Resumable upload::
+
+            >>> async with drive.upload_file("large.bin", parent, size=size) as file:
+            ...     try:
+            ...         # ... write data ...
+            ...         await file.flush()
+            ...     except TimeoutError:
+            ...         offset = await file.tell()
+            ...         await file.seek(offset)
+            ...         # Continue from offset
     """
 
     @abstractmethod
     async def tell(self) -> int:
-        """
-        Get current position.
+        """Get the current write position.
+
+        Returns the absolute byte offset of the current write position.
+        Used for resumable uploads to determine how much data was successfully
+        written before an interruption.
+
+        Returns:
+            Current byte offset from the beginning of the file.
+
+        Example:
+            Checking upload progress::
+
+                >>> bytes_written = await file.tell()
+                >>> print(f"Uploaded {bytes_written}/{total_size} bytes")
         """
 
     @abstractmethod
     async def seek(self, offset: int) -> int:
-        """
-        Seek to `offset` position. Always starts from the begining.
+        """Seek to the specified position for resuming uploads.
+
+        Moves the write pointer to the given absolute offset from the
+        beginning. Used to resume uploads after interruptions.
+
+        Args:
+            offset: Absolute byte offset from the beginning.
+
+        Returns:
+            The new absolute position.
+
+        Example:
+            Resuming upload::
+
+                >>> last_position = await file.tell()
+                >>> # ... connection lost ...
+                >>> await file.seek(last_position)
+                >>> # Continue writing from last position
         """
 
     @abstractmethod
     async def write(self, chunk: bytes) -> int:
-        """
-        Writes `chunk` to the stream.
-        Returns bytes writen to buffer.
+        """Write data to the upload stream.
+
+        Writes the given bytes to the file at the current position.
+        May buffer data internally - call flush() to ensure data is sent
+        to the server.
+
+        Args:
+            chunk: Bytes to write.
+
+        Returns:
+            Number of bytes written to the buffer.
+
+        Example:
+            Writing with progress tracking::
+
+                >>> total_written = 0
+                >>> for chunk in chunks:
+                ...     written = await file.write(chunk)
+                ...     total_written += written
+                ...     print(f"Progress: {total_written} bytes")
         """
 
     @abstractmethod
     async def flush(self) -> None:
-        """
-        Flush buffer.
+        """Flush buffered data to the server.
+
+        Ensures all buffered data is sent to the cloud storage backend.
+        Should be called before closing the file or checking upload status.
+
+        Example:
+            Flushing before getting node::
+
+                >>> await file.write(data)
+                >>> await file.flush()
+                >>> node = await file.node()
         """
 
     @abstractmethod
     async def node(self) -> Node:
-        """
-        Get the wrote node.
+        """Get the uploaded Node.
+
+        Returns the Node instance representing the uploaded file. Should be
+        called after flush() to ensure the upload is complete.
+
+        Returns:
+            The Node instance for the uploaded file.
 
         Raises:
-        NodeNotFoundError if failed.
+            NodeNotFoundError: If upload failed or is incomplete.
+
+        Example:
+            Getting uploaded node::
+
+                >>> async with drive.upload_file("doc.pdf", parent, size=size) as file:
+                ...     await file.write(data)
+                ...     await file.flush()
+                ...     uploaded_node = await file.node()
+                ...     print(f"Uploaded: {uploaded_node.id}")
         """
 
 
 class Service(metaclass=ABCMeta):
+    """Base interface for all service implementations.
+
+    Defines the minimal contract for FileService and SnapshotService
+    implementations. All services must declare their API version for
+    compatibility checking.
+
+    Implementations:
+        Subclass this to create FileService or SnapshotService implementations.
+    """
+
     @property
     @abstractmethod
     def api_version(self) -> int:
-        """
-        Get competible API version for this class.
+        """Get the API version implemented by this service.
+
+        Must return the API version number that this implementation adheres
+        to. Used during drive creation to ensure compatibility between
+        the core library and service implementations.
+
+        Returns:
+            API version number as an integer.
+
+        Raises:
+            InvalidServiceError: During drive creation if version mismatches.
+
+        Example:
+            Implementing api_version::
+
+                >>> class MyFileService(FileService):
+                ...     @property
+                ...     def api_version(self) -> int:
+                ...         return 4
         """
 
 
 type CreateService[T: Service] = Callable[[], AbstractAsyncContextManager[T]]
+"""Factory type for creating Service instances as async context managers.
+
+A callable that returns an async context manager yielding a Service
+instance. Used for dependency injection during drive creation.
+
+Type Parameters:
+    T: The specific Service subclass (FileService or SnapshotService).
+
+Example:
+    Implementing a service factory::
+
+        >>> @asynccontextmanager
+        >>> async def create_my_service() -> AsyncIterator[MyFileService]:
+        ...     service = MyFileService()
+        ...     try:
+        ...         await service.initialize()
+        ...         yield service
+        ...     finally:
+        ...         await service.cleanup()
+"""
+
+
 type CreateServiceMiddleware[T: Service] = Callable[[T], AbstractAsyncContextManager[T]]
+"""Middleware factory type for wrapping Service instances.
+
+A callable that takes a Service instance and returns an async context
+manager yielding a wrapped Service. Used for adding cross-cutting concerns
+like logging, caching, or rate limiting.
+
+Type Parameters:
+    T: The specific Service subclass being wrapped.
+
+Example:
+    Implementing logging middleware::
+
+        >>> @asynccontextmanager
+        >>> async def logging_middleware(
+        ...     service: FileService,
+        ... ) -> AsyncIterator[FileService]:
+        ...     print(f"Service started: {service}")
+        ...     try:
+        ...         yield service
+        ...     finally:
+        ...         print(f"Service stopped: {service}")
+"""
 
 
 class FileService(Service, metaclass=ABCMeta):
-    """
-    Provides actions to cloud drives.
+    """Backend implementation interface for cloud storage operations.
+
+    FileService defines the contract for interacting with cloud storage
+    APIs. Implementations provide the actual I/O operations for a specific
+    cloud provider (e.g., Google Drive, Dropbox, OneDrive).
+
+    Implementations must:
+        - Provide all abstract methods
+        - Return api_version = 4
+        - Handle authentication appropriately
+        - Support async context manager protocol
+        - Raise appropriate exceptions on errors
+
+    Used With:
+        Paired with a SnapshotService and passed to create_drive().
+
+    Thread Safety:
+        Implementations should handle concurrent operations safely.
+
+    Example:
+        Basic implementation structure::
+
+            >>> class MyCloudService(FileService):
+            ...     @property
+            ...     def api_version(self) -> int:
+            ...         return 4
+            ...
+            ...     async def get_root(self) -> Node:
+            ...         # Fetch root from API
+            ...         pass
+            ...
+            ...     # ... implement other abstract methods ...
+
+        Using with create_drive::
+
+            >>> @asynccontextmanager
+            >>> async def create_my_service():
+            ...     service = MyCloudService(credentials)
+            ...     try:
+            ...         yield service
+            ...     finally:
+            ...         await service.close()
+            >>>
+            >>> async with create_drive(
+            ...     file=create_my_service,
+            ...     snapshot=create_snapshot,
+            ... ) as drive:
+            ...     await drive.sync()
     """
 
     @abstractmethod
     async def get_initial_cursor(self) -> str:
-        """
-        Get the initial check point.
+        """Get the initial checkpoint cursor for change tracking.
+
+        Returns a cursor representing the current state of the cloud drive
+        before any changes are tracked. Used as the starting point for the
+        first sync operation.
+
+        Returns:
+            Initial cursor string. Format is implementation-specific.
+
+        Example:
+            Implementation pattern::
+
+                >>> async def get_initial_cursor(self) -> str:
+                ...     # For some APIs, this might be a special token
+                ...     return "start_token"
+                ...     # For others, might be current timestamp
+                ...     return str(int(time.time()))
         """
 
     @abstractmethod
     async def get_root(self) -> Node:
-        """
-        Fetch the root node.
+        """Fetch the root directory node from the cloud storage.
+
+        Retrieves the root directory's metadata from the cloud API and
+        returns it as a Node instance. This is typically cached by the
+        SnapshotService after the first call.
+
+        Returns:
+            Node representing the root directory.
+
+        Raises:
+            AuthenticationError: If not authenticated.
+
+        Example:
+            Implementation pattern::
+
+                >>> async def get_root(self) -> Node:
+                ...     response = await self.api_client.get("/root")
+                ...     return self._api_response_to_node(response)
         """
 
     @abstractmethod
@@ -247,15 +850,42 @@ class FileService(Service, metaclass=ABCMeta):
         self,
         cursor: str,
     ) -> AsyncIterator[tuple[list[ChangeAction], str]]:
-        """
-        Fetch changes starts from `cursor`.
+        """Fetch incremental changes from the cloud storage.
 
-        Will be used like this:
-        ```
-        async for changes, next_cursor in self.fetch_changes('...'):
-            ...
-        ```
-        So you should yield a page for every iteration.
+        Returns an async iterator that yields pages of changes since the
+        given cursor. Each iteration provides a list of changes and the
+        cursor for the next page.
+
+        This method implements polling or pagination to retrieve all changes
+        since the given checkpoint.
+
+        Args:
+            cursor: Starting cursor from previous sync or get_initial_cursor().
+
+        Yields:
+            Tuples of (changes, next_cursor) where:
+                - changes: List of ChangeAction (additions/updates/removals)
+                - next_cursor: Cursor for the next page or next sync
+
+        Example:
+            Implementation pattern::
+
+                >>> async def get_changes(
+                ...     self,
+                ...     cursor: str,
+                ... ) -> AsyncIterator[tuple[list[ChangeAction], str]]:
+                ...     while True:
+                ...         response = await self.api_client.get_changes(cursor)
+                ...         changes = [self._convert_change(c) for c in response.changes]
+                ...         yield changes, response.next_cursor
+                ...         if not response.has_more:
+                ...             break
+                ...         cursor = response.next_cursor
+
+            Usage in sync::
+
+                >>> async for changes, next_cursor in service.get_changes(cursor):
+                ...     await snapshot.apply_changes(changes, next_cursor)
         """
 
     @abstractmethod
@@ -267,34 +897,86 @@ class FileService(Service, metaclass=ABCMeta):
         new_name: str | None,
         trashed: bool | None,
     ) -> Node:
-        """
-        Changes the state of the given node:
-        1. Rename the node.
-        2. Move the node to another directory.
-        3. Put the node to trash or restore it from trash.
+        """Modify node properties (rename, move, trash/restore).
 
-        `node` is the node to be modified.
+        Performs one or more operations on the node:
+        - Rename: Set new_name to change the node's name
+        - Move: Set new_parent to move to a different directory
+        - Trash: Set trashed=True to move to trash, False to restore
 
-        `new_parent` is the new parent directory. `None` means don't move the node.
+        At least one of the optional parameters must be non-None.
 
-        `new_name` is the new node name. `None` means don't rename the node.
+        Args:
+            node: The Node to modify.
+            new_parent: New parent directory, or None to keep current parent.
+            new_name: New name, or None to keep current name.
+            trashed: True to trash, False to restore, None to leave unchanged.
 
-        `trashed` sets to `True` to put the node to trash. Sets to `False` will
-        restore it. `None` means don't change trash state.
+        Returns:
+            New Node instance reflecting the changes.
+
+        Raises:
+            AuthenticationError: If not authenticated.
+            ValueError: If all optional parameters are None.
+
+        Example:
+            Implementation pattern::
+
+                >>> async def move(
+                ...     self,
+                ...     node: Node,
+                ...     *,
+                ...     new_parent: Node | None,
+                ...     new_name: str | None,
+                ...     trashed: bool | None,
+                ... ) -> Node:
+                ...     updates = {}
+                ...     if new_name:
+                ...         updates["name"] = new_name
+                ...     if new_parent:
+                ...         updates["parent_id"] = new_parent.id
+                ...     if trashed is not None:
+                ...         updates["trashed"] = trashed
+                ...     response = await self.api_client.update(node.id, updates)
+                ...     return self._api_response_to_node(response)
         """
 
     @abstractmethod
     async def delete(self, node: Node) -> None:
-        """
-        Permanently delete the node.
+        """Permanently delete a node.
+
+        Removes the node from the cloud storage permanently. This operation
+        cannot be undone. For recoverable deletion, use move() with
+        trashed=True instead.
+
+        Args:
+            node: The Node to permanently delete.
+
+        Raises:
+            AuthenticationError: If not authenticated.
+
+        Example:
+            Implementation pattern::
+
+                >>> async def delete(self, node: Node) -> None:
+                ...     await self.api_client.delete(node.id)
         """
 
     @abstractmethod
     async def purge_trash(self) -> None:
-        """
-        Purge everything in the trash.
+        """Permanently delete all trashed items.
 
-        Should raise exception if failed.
+        Empties the trash bin, permanently removing all trashed nodes.
+        This operation cannot be undone.
+
+        Raises:
+            AuthenticationError: If not authenticated.
+
+        Example:
+            Implementation pattern::
+
+                >>> async def purge_trash(self) -> None:
+                ...     await self.api_client.empty_trash()
         """
 
     @abstractmethod
@@ -306,28 +988,77 @@ class FileService(Service, metaclass=ABCMeta):
         exist_ok: bool,
         private: PrivateDict | None,
     ) -> Node:
-        """
-        Create a directory.
+        """Create a new directory.
 
-        `name` will be the name of the directory.
+        Creates a directory with the given name under the specified parent.
+        Behavior when the directory exists depends on exist_ok.
 
-        `parent` should be a directory you want to put this directory in.
+        Args:
+            name: Name for the new directory.
+            parent: Parent directory Node.
+            exist_ok: If True, don't raise error if directory exists.
+                If False, raise NodeExistsError if directory exists.
+            private: Optional service-specific metadata.
 
-        If `exist_ok` is `False`, you should not create the directory if it is
-        already exists, and raise an exception.
+        Returns:
+            Node representing the created (or existing) directory.
 
-        `private` is an optional metadata, you can decide how to place this for
-        each services.
+        Raises:
+            AuthenticationError: If not authenticated.
+            NodeExistsError: If exist_ok=False and directory exists.
 
-        Will return the created node.
+        Example:
+            Implementation pattern::
+
+                >>> async def create_directory(
+                ...     self,
+                ...     name: str,
+                ...     parent: Node,
+                ...     *,
+                ...     exist_ok: bool,
+                ...     private: PrivateDict | None,
+                ... ) -> Node:
+                ...     if not exist_ok:
+                ...         existing = await self._find_child(parent.id, name)
+                ...         if existing:
+                ...             raise NodeExistsError(existing)
+                ...     response = await self.api_client.create_folder(
+                ...         name=name,
+                ...         parent_id=parent.id,
+                ...     )
+                ...     return self._api_response_to_node(response)
         """
 
     @abstractmethod
     def download_file(self, node: Node) -> AbstractAsyncContextManager[ReadableFile]:
-        """
-        Download the node.
+        """Create a readable stream for downloading a file.
 
-        Will return a `ReadableFile` which is a file-like object.
+        Returns an async context manager that yields a ReadableFile for
+        streaming the file content from cloud storage.
+
+        Args:
+            node: The file Node to download.
+
+        Returns:
+            Async context manager yielding ReadableFile.
+
+        Raises:
+            AuthenticationError: If not authenticated.
+            ValueError: If node is a directory.
+
+        Example:
+            Implementation pattern::
+
+                >>> @asynccontextmanager
+                >>> async def download_file(
+                ...     self,
+                ...     node: Node,
+                ... ) -> AsyncIterator[ReadableFile]:
+                ...     stream = await self.api_client.download(node.id)
+                ...     try:
+                ...         yield MyReadableFile(stream, node)
+                ...     finally:
+                ...         await stream.close()
         """
 
     @abstractmethod
@@ -341,126 +1072,389 @@ class FileService(Service, metaclass=ABCMeta):
         media_info: MediaInfo | None,
         private: PrivateDict | None,
     ) -> AbstractAsyncContextManager[WritableFile]:
-        """
-        Upload a file.
+        """Create a writable stream for uploading a file.
 
-        `name` is the name of the uploaded file.
+        Returns an async context manager that yields a WritableFile for
+        streaming content to cloud storage.
 
-        `parent` is the parent directory where this file upload to.
+        Args:
+            name: Name for the uploaded file.
+            parent: Parent directory Node.
+            size: File size in bytes, or None if unknown.
+            mime_type: MIME type string, or None for default.
+            media_info: Optional media metadata for images/videos.
+            private: Optional service-specific metadata.
 
-        `size` can be `None`, for cases that the file size is unavailable.
-        e.g. The uploading file is from a stream.
+        Returns:
+            Async context manager yielding WritableFile.
 
-        `mime_type`, `media_info` and `private` are optional. It is your choice
-        to decide how to place these properties.
+        Raises:
+            AuthenticationError: If not authenticated.
+            NodeExistsError: If file with same name already exists.
+
+        Example:
+            Implementation pattern::
+
+                >>> @asynccontextmanager
+                >>> async def upload_file(
+                ...     self,
+                ...     name: str,
+                ...     parent: Node,
+                ...     *,
+                ...     size: int | None,
+                ...     mime_type: str | None,
+                ...     media_info: MediaInfo | None,
+                ...     private: PrivateDict | None,
+                ... ) -> AsyncIterator[WritableFile]:
+                ...     stream = await self.api_client.upload_start(
+                ...         name=name,
+                ...         parent_id=parent.id,
+                ...         size=size,
+                ...     )
+                ...     try:
+                ...         yield MyWritableFile(stream)
+                ...     finally:
+                ...         await stream.finalize()
         """
 
     @abstractmethod
     async def get_hasher_factory(self) -> CreateHasher:
-        """
-        Get a hash calculator factory.
+        """Get a factory for creating hash calculators.
+
+        Returns a factory function that creates Hasher instances compatible
+        with this service's hash algorithm (e.g., MD5, SHA-1, SHA-256).
+
+        Returns:
+            Factory function for creating Hasher instances.
+
+        Example:
+            Implementation pattern::
+
+                >>> async def get_hasher_factory(self) -> CreateHasher:
+                ...     async def create_hasher() -> Hasher:
+                ...         return MD5Hasher()
+                ...     return create_hasher
         """
 
     @abstractmethod
     async def is_authenticated(self) -> bool:
-        """
-        Check if the service is authenticated and ready for operations.
+        """Check if the service is authenticated and ready for operations.
 
-        Returns True if the service has valid authentication credentials/tokens
-        and can make authenticated requests. Returns False otherwise.
+        Checks cached authentication state without performing I/O if possible.
+        Should verify that credentials/tokens are present and not obviously
+        expired.
 
-        This method should check cached authentication state without performing
-        I/O if possible. Implementations may validate cached tokens or credentials
-        without making network requests.
+        Returns:
+            True if authenticated and ready, False otherwise.
+
+        Example:
+            Implementation pattern::
+
+                >>> async def is_authenticated(self) -> bool:
+                ...     return self.access_token is not None
         """
 
     @abstractmethod
     async def authenticate(self) -> None:
-        """
-        Authenticate the service for use.
+        """Authenticate the service for use.
 
-        This method establishes authentication for the service. The specific
-        authentication mechanism is implementation-dependent:
-        - OAuth 2.0 (tokens provided through implementation-specific methods)
-        - API key validation
-        - Username/password credentials
-        - Service account authentication
+        Establishes authentication using implementation-specific mechanisms
+        (OAuth tokens, API keys, etc.). Implementations must manage their
+        own credential storage and token refresh.
 
-        Implementations are responsible for:
-        1. Managing their own token/credential storage
-        2. Handling token refresh/renewal if applicable
-        3. Raising exceptions if authentication fails
+        This method is NOT interactive. OAuth implementations should handle
+        token exchange separately before calling this method.
 
         Raises:
-            AuthenticationError: If authentication fails
+            AuthenticationError: If authentication fails.
 
-        Note: This method is NOT interactive. OAuth implementations should
-        handle token exchange separately before calling this method.
+        Example:
+            Implementation pattern::
+
+                >>> async def authenticate(self) -> None:
+                ...     if not self.credentials:
+                ...         raise AuthenticationError("No credentials configured")
+                ...     response = await self.api_client.validate_token(
+                ...         self.credentials.access_token
+                ...     )
+                ...     if not response.valid:
+                ...         raise AuthenticationError("Invalid credentials")
         """
 
 
 type CreateFileService = CreateService[FileService]
+"""Factory type for creating FileService instances.
+
+See CreateService for details.
+"""
+
+
 type CreateFileServiceMiddleware = CreateServiceMiddleware[FileService]
+"""Middleware factory type for wrapping FileService instances.
+
+See CreateServiceMiddleware for details.
+"""
 
 
 class SnapshotService(Service, metaclass=ABCMeta):
-    """
-    Provides actions to cache file metadata.
+    """Local cache interface for node metadata and change tracking.
+
+    SnapshotService defines the contract for maintaining a local cache of
+    the cloud drive's directory structure and file metadata. This enables:
+    - Fast path lookups without API calls
+    - Efficient change synchronization
+    - Offline access to metadata
+
+    Implementations typically use:
+        - SQLite database for persistence
+        - In-memory structures for performance
+        - Transaction support for atomic updates
+
+    Used With:
+        Paired with a FileService and passed to create_drive().
+
+    Thread Safety:
+        Implementations should handle concurrent access safely.
+
+    Example:
+        Basic implementation structure::
+
+            >>> class SQLiteSnapshot(SnapshotService):
+            ...     @property
+            ...     def api_version(self) -> int:
+            ...         return 4
+            ...
+            ...     async def get_root(self) -> Node:
+            ...         # Query from database
+            ...         pass
+            ...
+            ...     async def apply_changes(
+            ...         self,
+            ...         changes: list[ChangeAction],
+            ...         cursor: str,
+            ...     ) -> None:
+            ...         # Update database in transaction
+            ...         pass
+            ...
+            ...     # ... implement other abstract methods ...
     """
 
     @abstractmethod
     async def get_root(self) -> Node:
-        """
-        Get root directory as Node.
+        """Get the root directory node from the cache.
+
+        Retrieves the cached root node. This should be fast and not
+        involve I/O to the cloud service.
+
+        Returns:
+            Cached Node representing the root directory.
+
+        Raises:
+            NodeNotFoundError: If root not yet cached (need to sync first).
+
+        Example:
+            Implementation pattern::
+
+                >>> async def get_root(self) -> Node:
+                ...     row = await self.db.fetch_one("SELECT * FROM nodes WHERE parent_id IS NULL")
+                ...     if not row:
+                ...         raise NodeNotFoundError("root")
+                ...     return self._row_to_node(row)
         """
 
     @abstractmethod
     async def set_root(self, node: Node) -> None:
-        """
-        Set root directory to the snapshot.
+        """Store the root directory node in the cache.
+
+        Called during the first sync to initialize the cache with the root
+        node metadata.
+
+        Args:
+            node: The root Node to cache.
+
+        Example:
+            Implementation pattern::
+
+                >>> async def set_root(self, node: Node) -> None:
+                ...     await self.db.execute(
+                ...         "INSERT OR REPLACE INTO nodes VALUES (...)",
+                ...         self._node_to_values(node),
+                ...     )
         """
 
     @abstractmethod
     async def get_current_cursor(self) -> str:
-        """
-        Get the current cursor. If no cursor present (e.g. the first run),
-        should return an empty string.
+        """Get the current synchronization cursor.
+
+        Returns the cursor from the most recent sync operation. If no sync
+        has occurred yet (first run), returns an empty string.
+
+        Returns:
+            Current cursor string, or empty string if never synced.
+
+        Example:
+            Implementation pattern::
+
+                >>> async def get_current_cursor(self) -> str:
+                ...     row = await self.db.fetch_one("SELECT cursor FROM metadata")
+                ...     return row["cursor"] if row else ""
         """
 
     @abstractmethod
     async def get_node_by_id(self, node_id: str) -> Node:
-        """
-        Get node by ID.
+        """Retrieve a cached node by its ID.
+
+        Fast lookup of node metadata from the local cache using the
+        node's unique identifier.
+
+        Args:
+            node_id: The node's unique ID.
+
+        Returns:
+            The cached Node.
+
+        Raises:
+            NodeNotFoundError: If node not found in cache.
+
+        Example:
+            Implementation pattern::
+
+                >>> async def get_node_by_id(self, node_id: str) -> Node:
+                ...     row = await self.db.fetch_one(
+                ...         "SELECT * FROM nodes WHERE id = ?",
+                ...         node_id,
+                ...     )
+                ...     if not row:
+                ...         raise NodeNotFoundError(node_id)
+                ...     return self._row_to_node(row)
         """
 
     @abstractmethod
     async def get_node_by_path(self, path: PurePath) -> Node:
-        """
-        Resolve node by file path.
+        """Resolve a node by its absolute path.
+
+        Traverses the cached directory structure to find the node at the
+        given path.
+
+        Args:
+            path: Absolute path to the node.
+
+        Returns:
+            The Node at the given path.
+
+        Raises:
+            NodeNotFoundError: If path does not exist in cache.
+
+        Example:
+            Implementation pattern::
+
+                >>> async def get_node_by_path(self, path: PurePath) -> Node:
+                ...     node = await self.get_root()
+                ...     for part in path.parts[1:]:  # Skip root "/"
+                ...         node = await self.get_child_by_name(part, node.id)
+                ...     return node
         """
 
     @abstractmethod
     async def resolve_path_by_id(self, node_id: str) -> PurePath:
-        """
-        Resolve absolute path by ID.
+        """Resolve the absolute path for a node ID.
+
+        Walks up the parent chain to construct the full path for the
+        given node.
+
+        Args:
+            node_id: The node's unique ID.
+
+        Returns:
+            Absolute PurePath to the node.
+
+        Raises:
+            NodeNotFoundError: If node not found in cache.
+
+        Example:
+            Implementation pattern::
+
+                >>> async def resolve_path_by_id(self, node_id: str) -> PurePath:
+                ...     parts = []
+                ...     node = await self.get_node_by_id(node_id)
+                ...     while node.parent_id:
+                ...         parts.insert(0, node.name)
+                ...         node = await self.get_node_by_id(node.parent_id)
+                ...     return PurePath("/", *parts)
         """
 
     @abstractmethod
     async def get_child_by_name(self, name: str, parent_id: str) -> Node:
-        """
-        Get a child under the given parent by name.
+        """Find a child node by name under a parent.
+
+        Searches for a direct child with the given name under the specified
+        parent node.
+
+        Args:
+            name: The child's name.
+            parent_id: The parent node's ID.
+
+        Returns:
+            The child Node.
+
+        Raises:
+            NodeNotFoundError: If child not found.
+
+        Example:
+            Implementation pattern::
+
+                >>> async def get_child_by_name(self, name: str, parent_id: str) -> Node:
+                ...     row = await self.db.fetch_one(
+                ...         "SELECT * FROM nodes WHERE parent_id = ? AND name = ?",
+                ...         parent_id,
+                ...         name,
+                ...     )
+                ...     if not row:
+                ...         raise NodeNotFoundError(name)
+                ...     return self._row_to_node(row)
         """
 
     @abstractmethod
     async def get_children_by_id(self, parent_id: str) -> list[Node]:
-        """
-        Get first-level children under a node.
+        """Get all direct children of a parent node.
+
+        Retrieves the list of immediate children (both files and directories)
+        under the specified parent.
+
+        Args:
+            parent_id: The parent node's ID.
+
+        Returns:
+            List of child Nodes (may be empty).
+
+        Example:
+            Implementation pattern::
+
+                >>> async def get_children_by_id(self, parent_id: str) -> list[Node]:
+                ...     rows = await self.db.fetch_all(
+                ...         "SELECT * FROM nodes WHERE parent_id = ? ORDER BY name",
+                ...         parent_id,
+                ...     )
+                ...     return [self._row_to_node(row) for row in rows]
         """
 
     @abstractmethod
     async def get_trashed_nodes(self) -> list[Node]:
-        """
-        Get trashed nodes.
+        """Get all nodes currently in the trash.
+
+        Retrieves all nodes marked as trashed from the cache.
+
+        Returns:
+            List of trashed Nodes (may be empty).
+
+        Example:
+            Implementation pattern::
+
+                >>> async def get_trashed_nodes(self) -> list[Node]:
+                ...     rows = await self.db.fetch_all(
+                ...         "SELECT * FROM nodes WHERE is_trashed = 1"
+                ...     )
+                ...     return [self._row_to_node(row) for row in rows]
         """
 
     @abstractmethod
@@ -469,41 +1463,220 @@ class SnapshotService(Service, metaclass=ABCMeta):
         changes: list[ChangeAction],
         cursor: str,
     ) -> None:
-        """
-        Apply the given changes to the snapshot.
+        """Apply change actions to the cache and update cursor.
+
+        Processes a list of changes (additions, updates, removals) and
+        updates the cache accordingly. Should be atomic - either all
+        changes apply successfully or none do.
+
+        Args:
+            changes: List of ChangeAction to apply.
+            cursor: New cursor value to store after applying changes.
+
+        Example:
+            Implementation pattern::
+
+                >>> async def apply_changes(
+                ...     self,
+                ...     changes: list[ChangeAction],
+                ...     cursor: str,
+                ... ) -> None:
+                ...     async with self.db.transaction():
+                ...         for change in changes:
+                ...             if change[0]:  # RemoveAction
+                ...                 await self.db.execute(
+                ...                     "DELETE FROM nodes WHERE id = ?",
+                ...                     change[1],
+                ...                 )
+                ...             else:  # UpdateAction
+                ...                 node = change[1]
+                ...                 await self.db.execute(
+                ...                     "INSERT OR REPLACE INTO nodes VALUES (...)",
+                ...                     self._node_to_values(node),
+                ...                 )
+                ...         await self.db.execute(
+                ...             "UPDATE metadata SET cursor = ?",
+                ...             cursor,
+                ...         )
         """
 
     @abstractmethod
     async def find_nodes_by_regex(self, pattern: str) -> list[Node]:
-        """
-        Find node by regex.
+        """Find nodes whose names match a regex pattern.
+
+        Searches the cache for nodes with names matching the given regular
+        expression pattern.
+
+        Args:
+            pattern: Regular expression pattern to match against node names.
+
+        Returns:
+            List of matching Nodes (may be empty).
+
+        Example:
+            Implementation pattern::
+
+                >>> async def find_nodes_by_regex(self, pattern: str) -> list[Node]:
+                ...     import re
+                ...     regex = re.compile(pattern)
+                ...     rows = await self.db.fetch_all("SELECT * FROM nodes")
+                ...     nodes = [self._row_to_node(row) for row in rows]
+                ...     return [n for n in nodes if regex.search(n.name)]
         """
 
 
 type CreateSnapshotService = CreateService[SnapshotService]
+"""Factory type for creating SnapshotService instances.
+
+See CreateService for details.
+"""
+
+
 type CreateSnapshotServiceMiddleware = CreateServiceMiddleware[SnapshotService]
+"""Middleware factory type for wrapping SnapshotService instances.
+
+See CreateServiceMiddleware for details.
+"""
 
 
 class Drive(metaclass=ABCMeta):
-    """
-    Interact with the drive.
+    """High-level interface for cloud drive operations.
+
+    Drive is the main user-facing API for interacting with cloud storage.
+    It combines FileService (cloud API) and SnapshotService (local cache)
+    to provide efficient, feature-rich operations.
+
+    Key Features:
+        - Path-based and ID-based node access
+        - Directory traversal and tree walking
+        - File upload/download with resumable support
+        - Node manipulation (create, move, rename, delete)
+        - Change synchronization
+        - Trash management
+
+    Usage Pattern:
+        Create Drive instances using create_drive() as an async context manager.
+        The Drive interface ensures proper initialization and cleanup.
+
+    Authentication:
+        Most operations require authentication. Use is_authenticated() to check
+        and authenticate() to establish credentials.
+
+    Thread Safety:
+        Drive operations are async-safe but instances should not be shared
+        across concurrent tasks without external synchronization.
+
+    Example:
+        Basic usage pattern::
+
+            >>> async with create_drive(
+            ...     file=create_file_service,
+            ...     snapshot=create_snapshot_service,
+            ... ) as drive:
+            ...     # Check authentication
+            ...     if not await drive.is_authenticated():
+            ...         await drive.authenticate()
+            ...
+            ...     # Sync to get latest changes
+            ...     async for change in drive.sync():
+            ...         print(f"Change: {change}")
+            ...
+            ...     # Navigate filesystem
+            ...     root = await drive.get_root()
+            ...     children = await drive.get_children(root)
+            ...
+            ...     # Upload a file
+            ...     async with drive.upload_file("doc.txt", root, size=1024) as f:
+            ...         await f.write(b"Hello World")
+            ...         await f.flush()
+            ...         node = await f.node()
     """
 
     @abstractmethod
     async def get_root(self) -> Node:
-        """Get the root node."""
+        """Get the root directory node.
+
+        Returns the root node of the drive's directory structure.
+
+        Returns:
+            Node representing the root directory.
+
+        Raises:
+            NodeNotFoundError: If not yet synced (cache empty).
+
+        Example:
+            Getting root and listing contents::
+
+                >>> root = await drive.get_root()
+                >>> print(f"Root ID: {root.id}")
+                >>> children = await drive.get_children(root)
+        """
 
     @abstractmethod
     async def get_node_by_id(self, node_id: str) -> Node:
-        """Get node by node id."""
+        """Get a node by its unique identifier.
+
+        Fast lookup using the node's ID, retrieved from cache.
+
+        Args:
+            node_id: The node's unique ID.
+
+        Returns:
+            The Node with the given ID.
+
+        Raises:
+            NodeNotFoundError: If node not found in cache.
+
+        Example:
+            Getting node by ID::
+
+                >>> node = await drive.get_node_by_id("abc123")
+                >>> print(f"Found: {node.name}")
+        """
 
     @abstractmethod
     async def get_node_by_path(self, path: PurePath) -> Node:
-        """Get node by absolute path."""
+        """Get a node by its absolute path.
+
+        Resolves the path through the cached directory structure.
+
+        Args:
+            path: Absolute path to the node (must start with "/").
+
+        Returns:
+            The Node at the given path.
+
+        Raises:
+            NodeNotFoundError: If path does not exist.
+            ValueError: If path is not absolute.
+
+        Example:
+            Getting node by path::
+
+                >>> from pathlib import PurePath
+                >>> node = await drive.get_node_by_path(PurePath("/docs/file.txt"))
+                >>> print(f"Size: {node.size} bytes")
+        """
 
     @abstractmethod
     async def resolve_path(self, node: Node) -> PurePath:
-        """Resolve absolute path of the node."""
+        """Resolve the absolute path of a node.
+
+        Constructs the full path by walking up the parent chain.
+
+        Args:
+            node: The Node to resolve.
+
+        Returns:
+            Absolute PurePath to the node.
+
+        Example:
+            Resolving node path::
+
+                >>> node = await drive.get_node_by_id("abc123")
+                >>> path = await drive.resolve_path(node)
+                >>> print(f"Path: {path}")
+        """
 
     @abstractmethod
     async def get_child_by_name(
@@ -511,19 +1684,92 @@ class Drive(metaclass=ABCMeta):
         name: str,
         parent: Node,
     ) -> Node:
-        """Get node by given name and parent."""
+        """Find a child node by name under a parent.
+
+        Searches for a direct child with the given name.
+
+        Args:
+            name: The child's name to find.
+            parent: The parent Node to search under.
+
+        Returns:
+            The child Node with matching name.
+
+        Raises:
+            NodeNotFoundError: If no child with that name exists.
+
+        Example:
+            Finding child by name::
+
+                >>> root = await drive.get_root()
+                >>> docs = await drive.get_child_by_name("Documents", root)
+        """
 
     @abstractmethod
     async def get_children(self, parent: Node) -> list[Node]:
-        """Get the child node list of given node."""
+        """Get all direct children of a directory.
+
+        Returns both files and subdirectories under the parent.
+
+        Args:
+            parent: The parent directory Node.
+
+        Returns:
+            List of child Nodes (may be empty).
+
+        Example:
+            Listing directory contents::
+
+                >>> root = await drive.get_root()
+                >>> children = await drive.get_children(root)
+                >>> for child in children:
+                ...     type_ = "DIR" if child.is_directory else "FILE"
+                ...     print(f"{type_}: {child.name}")
+        """
 
     @abstractmethod
     async def get_trashed_nodes(self, flatten: bool = False) -> list[Node]:
-        """Get trashed node list."""
+        """Get all nodes in the trash.
+
+        Args:
+            flatten: If False (default), exclude nodes whose parent is
+                also trashed. If True, return all trashed nodes.
+
+        Returns:
+            List of trashed Nodes (may be empty).
+
+        Example:
+            Listing trash contents::
+
+                >>> trashed = await drive.get_trashed_nodes()
+                >>> for node in trashed:
+                ...     print(f"Trashed: {node.name}")
+
+            Getting all trashed nodes including nested::
+
+                >>> all_trashed = await drive.get_trashed_nodes(flatten=True)
+        """
 
     @abstractmethod
     async def find_nodes_by_regex(self, pattern: str) -> list[Node]:
-        """Find nodes by name."""
+        """Find nodes whose names match a regex pattern.
+
+        Searches the entire drive for nodes with names matching the
+        given regular expression.
+
+        Args:
+            pattern: Regular expression pattern to match.
+
+        Returns:
+            List of matching Nodes (may be empty).
+
+        Example:
+            Finding all Python files::
+
+                >>> nodes = await drive.find_nodes_by_regex(r".*\\.py$")
+                >>> for node in nodes:
+                ...     print(f"Python file: {node.name}")
+        """
 
     @abstractmethod
     def walk(
@@ -532,7 +1778,38 @@ class Drive(metaclass=ABCMeta):
         *,
         include_trashed: bool = False,
     ) -> AsyncIterator[tuple[Node, list[Node], list[Node]]]:
-        """Traverse nodes from given node."""
+        """Recursively traverse directory tree from a starting node.
+
+        Similar to os.walk(), yields directory information in depth-first order.
+
+        Args:
+            node: Starting directory Node for traversal.
+            include_trashed: If True, include trashed nodes in traversal.
+
+        Yields:
+            Tuples of (directory, subdirectories, files) where:
+                - directory: Current directory Node being visited
+                - subdirectories: List of direct subdirectory Nodes
+                - files: List of direct file Nodes
+
+        Example:
+            Walking entire drive::
+
+                >>> root = await drive.get_root()
+                >>> async for directory, subdirs, files in drive.walk(root):
+                ...     print(f"Directory: {directory.name}")
+                ...     for file in files:
+                ...         print(f"  File: {file.name} ({file.size} bytes)")
+
+            Finding all images::
+
+                >>> root = await drive.get_root()
+                >>> async for directory, _, files in drive.walk(root):
+                ...     for file in files:
+                ...         if file.is_image:
+                ...             path = await drive.resolve_path(file)
+                ...             print(f"Image: {path}")
+        """
 
     @abstractmethod
     async def create_directory(
@@ -542,11 +1819,76 @@ class Drive(metaclass=ABCMeta):
         *,
         exist_ok: bool = False,
     ) -> Node:
-        """Create a directory."""
+        """Create a new directory.
+
+        Creates a directory with the given name under the parent.
+
+        Args:
+            name: Name for the new directory.
+            parent: Parent directory Node where directory will be created.
+            exist_ok: If True, don't raise error if directory already exists.
+
+        Returns:
+            Node representing the created (or existing if exist_ok) directory.
+
+        Raises:
+            AuthenticationError: If not authenticated.
+            NodeExistsError: If exist_ok=False and directory already exists.
+            ValueError: If name contains invalid characters (/ or \\).
+
+        Example:
+            Creating a directory::
+
+                >>> root = await drive.get_root()
+                >>> docs = await drive.create_directory("Documents", root)
+                >>> print(f"Created: {docs.name} ({docs.id})")
+
+            Creating with exist_ok::
+
+                >>> docs = await drive.create_directory(
+                ...     "Documents",
+                ...     root,
+                ...     exist_ok=True,
+                ... )
+        """
 
     @abstractmethod
     def download_file(self, node: Node) -> AbstractAsyncContextManager[ReadableFile]:
-        """Download file."""
+        """Download a file from the cloud drive.
+
+        Returns an async context manager that yields a ReadableFile for
+        streaming the file content.
+
+        Args:
+            node: The file Node to download.
+
+        Returns:
+            Async context manager yielding ReadableFile.
+
+        Raises:
+            AuthenticationError: If not authenticated.
+            ValueError: If node is a directory.
+
+        Example:
+            Downloading a file::
+
+                >>> node = await drive.get_node_by_path(PurePath("/file.txt"))
+                >>> async with drive.download_file(node) as file:
+                ...     content = await file.read(1024)
+                ...     while content:
+                ...         process(content)
+                ...         content = await file.read(1024)
+
+            Using higher-level helper::
+
+                >>> from wcpan.drive.core.lib import download_file_to_local
+                >>> from pathlib import Path
+                >>> local_path = await download_file_to_local(
+                ...     drive,
+                ...     node,
+                ...     Path("/downloads"),
+                ... )
+        """
 
     @abstractmethod
     def upload_file(
@@ -558,11 +1900,65 @@ class Drive(metaclass=ABCMeta):
         mime_type: str | None = None,
         media_info: MediaInfo | None = None,
     ) -> AbstractAsyncContextManager[WritableFile]:
-        """Upload file."""
+        """Upload a file to the cloud drive.
+
+        Returns an async context manager that yields a WritableFile for
+        streaming content to the cloud.
+
+        Args:
+            name: Name for the uploaded file.
+            parent: Parent directory Node where file will be uploaded.
+            size: File size in bytes, or None if unknown.
+            mime_type: MIME type string, or None for default.
+            media_info: Optional MediaInfo for images/videos.
+
+        Returns:
+            Async context manager yielding WritableFile.
+
+        Raises:
+            AuthenticationError: If not authenticated.
+            NodeExistsError: If file with same name already exists.
+            ValueError: If name contains invalid characters (/ or \\).
+
+        Example:
+            Uploading a file::
+
+                >>> root = await drive.get_root()
+                >>> async with drive.upload_file("doc.txt", root, size=11) as file:
+                ...     await file.write(b"Hello World")
+                ...     await file.flush()
+                ...     node = await file.node()
+                ...     print(f"Uploaded: {node.id}")
+
+            Using higher-level helper::
+
+                >>> from wcpan.drive.core.lib import upload_file_from_local
+                >>> from pathlib import Path
+                >>> node = await upload_file_from_local(
+                ...     drive,
+                ...     Path("/local/file.jpg"),
+                ...     parent,
+                ...     mime_type="image/jpeg",
+                ... )
+        """
 
     @abstractmethod
     async def purge_trash(self) -> None:
-        """Purge everything in trash."""
+        """Permanently delete all items in the trash.
+
+        Empties the trash bin, permanently removing all trashed nodes.
+        This operation cannot be undone.
+
+        Raises:
+            AuthenticationError: If not authenticated.
+
+        Example:
+            Purging trash::
+
+                >>> await drive.purge_trash()
+                >>> trashed = await drive.get_trashed_nodes()
+                >>> assert len(trashed) == 0
+        """
 
     @abstractmethod
     async def move(
@@ -573,39 +1969,182 @@ class Drive(metaclass=ABCMeta):
         new_name: str | None = None,
         trashed: bool | None = None,
     ) -> Node:
-        """Move or rename or trash the node."""
+        """Move, rename, or trash/restore a node.
+
+        Performs one or more operations on the node. At least one
+        parameter must be non-None.
+
+        Args:
+            node: The Node to modify.
+            new_parent: New parent directory, or None to keep current.
+            new_name: New name, or None to keep current.
+            trashed: True to trash, False to restore, None to leave unchanged.
+
+        Returns:
+            New Node instance with updated properties.
+
+        Raises:
+            AuthenticationError: If not authenticated.
+            ValueError: If all parameters are None, or if trying to move
+                root node, or if new_name contains invalid characters.
+
+        Example:
+            Renaming a file::
+
+                >>> node = await drive.get_node_by_path(PurePath("/old.txt"))
+                >>> updated = await drive.move(node, new_name="new.txt")
+                >>> print(f"Renamed to: {updated.name}")
+
+            Moving to different directory::
+
+                >>> file = await drive.get_node_by_path(PurePath("/file.txt"))
+                >>> docs = await drive.get_node_by_path(PurePath("/Documents"))
+                >>> moved = await drive.move(file, new_parent=docs)
+
+            Moving to trash::
+
+                >>> node = await drive.get_node_by_path(PurePath("/temp.txt"))
+                >>> trashed_node = await drive.move(node, trashed=True)
+                >>> assert trashed_node.is_trashed
+
+            Using higher-level helper::
+
+                >>> from wcpan.drive.core.lib import move_node
+                >>> from pathlib import PurePath
+                >>> moved = await move_node(
+                ...     drive,
+                ...     PurePath("/old/path/file.txt"),
+                ...     PurePath("/new/path/file.txt"),
+                ... )
+        """
 
     @abstractmethod
     async def delete(self, node: Node) -> None:
-        """Permanently delete the node."""
+        """Permanently delete a node.
+
+        Removes the node from the cloud storage permanently. This operation
+        cannot be undone. For recoverable deletion, use move() with
+        trashed=True instead.
+
+        Args:
+            node: The Node to permanently delete.
+
+        Raises:
+            AuthenticationError: If not authenticated.
+
+        Example:
+            Deleting a file::
+
+                >>> node = await drive.get_node_by_path(PurePath("/temp.txt"))
+                >>> await drive.delete(node)
+
+            Safe deletion with confirmation::
+
+                >>> node = await drive.get_node_by_path(path)
+                >>> if confirm(f"Really delete {node.name}?"):
+                ...     await drive.delete(node)
+        """
 
     @abstractmethod
     def sync(self) -> AsyncIterator[ChangeAction]:
-        """Synchronize the snapshot.
+        """Synchronize the local cache with cloud storage.
 
-        This is the ONLY function which will modify the snapshot.
+        Fetches changes from the cloud and updates the local snapshot.
+        This is the ONLY operation that modifies the cached snapshot.
+
+        Should be called periodically or before operations that require
+        up-to-date metadata.
+
+        Yields:
+            ChangeAction instances for each change detected.
+
+        Raises:
+            AuthenticationError: If not authenticated.
+
+        Example:
+            Basic sync::
+
+                >>> async for change in drive.sync():
+                ...     if change[0]:  # RemoveAction
+                ...         print(f"Removed: {change[1]}")
+                ...     else:  # UpdateAction
+                ...         print(f"Updated: {change[1].name}")
+
+            Sync with type guards::
+
+                >>> from wcpan.drive.core.lib import is_remove, is_update
+                >>> async for change in drive.sync():
+                ...     if is_remove(change):
+                ...         removed, node_id = change
+                ...         handle_removal(node_id)
+                ...     elif is_update(change):
+                ...         updated, node = change
+                ...         handle_update(node)
         """
 
     @abstractmethod
     async def get_hasher_factory(self) -> CreateHasher:
-        """Get a Hasher instance for checksum calculation."""
+        """Get a factory for creating hash calculators.
+
+        Returns a factory function compatible with the service's hash
+        algorithm for verifying file integrity.
+
+        Returns:
+            Factory function for creating Hasher instances.
+
+        Example:
+            Computing file hash::
+
+                >>> hasher_factory = await drive.get_hasher_factory()
+                >>> hasher = await hasher_factory()
+                >>> with open("file.txt", "rb") as f:
+                ...     while chunk := f.read(8192):
+                ...         await hasher.update(chunk)
+                >>> file_hash = await hasher.hexdigest()
+        """
 
     @abstractmethod
     async def is_authenticated(self) -> bool:
-        """
-        Check if the drive is authenticated and ready for operations.
+        """Check if the drive is authenticated and ready for operations.
 
-        Returns True if authenticated, False otherwise.
+        Returns True if authenticated, False otherwise. Does not perform
+        I/O - checks cached authentication state.
+
+        Returns:
+            True if authenticated, False otherwise.
+
+        Example:
+            Checking before operations::
+
+                >>> if await drive.is_authenticated():
+                ...     await drive.sync()
+                ... else:
+                ...     print("Not authenticated")
         """
 
     @abstractmethod
     async def authenticate(self) -> None:
-        """
-        Authenticate the drive for use.
+        """Authenticate the drive for use.
 
-        This delegates to the underlying FileService's authentication.
-        See FileService.authenticate() for details.
+        Establishes authentication credentials. The specific mechanism
+        depends on the underlying FileService implementation.
+
+        This method is NOT interactive. OAuth implementations should handle
+        token exchange separately.
 
         Raises:
-            AuthenticationError: If authentication fails
+            AuthenticationError: If authentication fails.
+
+        Example:
+            Authenticating before use::
+
+                >>> async with create_drive(...) as drive:
+                ...     await drive.authenticate()
+                ...     await drive.sync()
+
+            Conditional authentication::
+
+                >>> if not await drive.is_authenticated():
+                ...     await drive.authenticate()
+                >>> await drive.upload_file(...)
         """

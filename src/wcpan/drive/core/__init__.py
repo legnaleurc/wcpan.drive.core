@@ -1,3 +1,112 @@
+"""wcpan.drive.core - Cloud drive abstraction layer for Python.
+
+wcpan.drive.core provides a unified interface for interacting with cloud storage
+services. It abstracts away service-specific details behind a consistent API,
+making it easy to build cloud-agnostic applications.
+
+Key Features:
+    - Unified Drive interface for all cloud storage operations
+    - Local metadata caching for fast path lookups
+    - Resumable file uploads and downloads
+    - Change synchronization with cursor-based tracking
+    - Type-safe async/await API
+    - Extensible through service implementations
+
+Architecture:
+    The library follows a three-layer architecture:
+
+    1. **Drive (Public API)**: High-level interface for user applications
+       - Path-based and ID-based node access
+       - File upload/download operations
+       - Directory management and traversal
+       - Change synchronization
+
+    2. **Services (Backend)**: Implementation layer
+       - FileService: Cloud storage API operations
+       - SnapshotService: Local metadata caching
+       - Middleware: Cross-cutting concerns (logging, caching, etc.)
+
+    3. **Types**: Core data structures
+       - Node: Immutable file/directory representation
+       - MediaInfo: Image/video metadata
+       - ChangeAction: Sync event types
+
+Quick Start:
+    Basic usage pattern::
+
+        >>> from wcpan.drive.core import create_drive
+        >>> from pathlib import Path, PurePath
+        >>>
+        >>> # Create drive with your service implementations
+        >>> async with create_drive(
+        ...     file=create_my_file_service,
+        ...     snapshot=create_my_snapshot_service,
+        ... ) as drive:
+        ...     # Authenticate
+        ...     await drive.authenticate()
+        ...
+        ...     # Sync to get latest changes
+        ...     async for change in drive.sync():
+        ...         print(f"Change: {change}")
+        ...
+        ...     # Navigate filesystem
+        ...     root = await drive.get_root()
+        ...     children = await drive.get_children(root)
+        ...     for child in children:
+        ...         print(f"{child.name}: {child.size} bytes")
+        ...
+        ...     # Upload a file
+        ...     from wcpan.drive.core.lib import upload_file_from_local
+        ...     node = await upload_file_from_local(
+        ...         drive,
+        ...         Path("/local/document.pdf"),
+        ...         root,
+        ...     )
+        ...
+        ...     # Download a file
+        ...     from wcpan.drive.core.lib import download_file_to_local
+        ...     local_path = await download_file_to_local(
+        ...         drive,
+        ...         node,
+        ...         Path("/downloads"),
+        ...     )
+
+Implementing Services:
+    To use wcpan.drive.core with a specific cloud provider, implement
+    FileService and SnapshotService::
+
+        >>> from wcpan.drive.core.types import FileService, SnapshotService
+        >>> from contextlib import asynccontextmanager
+        >>>
+        >>> class MyCloudService(FileService):
+        ...     @property
+        ...     def api_version(self) -> int:
+        ...         return 4
+        ...
+        ...     async def get_root(self) -> Node:
+        ...         # Implement cloud API calls
+        ...         pass
+        ...
+        ...     # ... implement other abstract methods ...
+        >>>
+        >>> @asynccontextmanager
+        >>> async def create_my_service():
+        ...     service = MyCloudService(credentials)
+        ...     try:
+        ...         yield service
+        ...     finally:
+        ...         await service.cleanup()
+
+Available Imports:
+    - create_drive: Main entry point for creating Drive instances
+
+For detailed API documentation, see:
+    - Drive interface: wcpan.drive.core.types.Drive
+    - Utility functions: wcpan.drive.core.lib
+    - Data types: wcpan.drive.core.types (Node, MediaInfo)
+    - Exceptions: wcpan.drive.core.exceptions
+"""
+
 from importlib.metadata import version
 
 from ._drive import create_drive

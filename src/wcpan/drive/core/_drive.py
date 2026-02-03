@@ -47,6 +47,60 @@ async def create_drive(
     file_middleware: Sequence[CreateFileServiceMiddleware] | None = None,
     snapshot_middleware: Sequence[CreateSnapshotServiceMiddleware] | None = None,
 ) -> AsyncIterator[Drive]:
+    """Create a configured Drive instance for cloud storage operations.
+
+    This is the primary entry point for creating Drive instances. It accepts
+    factory functions for FileService and SnapshotService implementations,
+    applies optional middleware, and yields a fully configured Drive.
+
+    The context manager ensures proper initialization and cleanup of all
+    services and middleware layers.
+
+    Args:
+        file: Factory function returning FileService async context manager.
+            Provides cloud storage backend operations.
+        snapshot: Factory function returning SnapshotService async context manager.
+            Provides local metadata caching.
+        file_middleware: Optional sequence of middleware factories to wrap
+            the FileService. Applied in order, with the last middleware
+            being the outermost wrapper.
+        snapshot_middleware: Optional sequence of middleware factories to wrap
+            the SnapshotService. Applied in order, with the last middleware
+            being the outermost wrapper.
+
+    Yields:
+        A fully configured Drive instance ready for operations.
+
+    Raises:
+        InvalidServiceError: If any service or middleware reports an API
+            version that doesn't match the required version (currently 4).
+
+    Example:
+        Basic usage::
+
+            >>> async with create_drive(
+            ...     file=create_my_file_service,
+            ...     snapshot=create_my_snapshot_service,
+            ... ) as drive:
+            ...     await drive.authenticate()
+            ...     async for change in drive.sync():
+            ...         print(f"Change: {change}")
+            ...     root = await drive.get_root()
+
+        With middleware::
+
+            >>> async with create_drive(
+            ...     file=create_file_service,
+            ...     snapshot=create_snapshot_service,
+            ...     file_middleware=[logging_middleware, cache_middleware],
+            ... ) as drive:
+            ...     # Middleware layers are applied: cache_middleware(logging_middleware(file))
+            ...     await drive.sync()
+
+    Note:
+        All services and middleware must implement api_version = 4.
+        Version checking occurs during context manager entry.
+    """
     async with (
         _create_service(
             create_service=snapshot,
