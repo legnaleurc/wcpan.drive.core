@@ -210,6 +210,32 @@ class SnapshotTestCase(IsolatedAsyncioTestCase):
         self.assertEqual(rv, [])
         aexpect(self._ss.get_trashed_nodes).assert_awaited_once_with()
 
+    async def testGetTrashedNodesFlatten(self):
+        trashed_dir = make_node(
+            node_id="d1", parent_id=None, name="dir", is_directory=True, is_trashed=True
+        )
+        child = make_node(
+            node_id="f1", parent_id="d1", name="file.txt", is_trashed=True
+        )
+        aexpect(self._ss.get_trashed_nodes).return_value = [trashed_dir, child]
+
+        rv = await self._drive.get_trashed_nodes(flatten=True)
+
+        self.assertEqual(rv, [trashed_dir, child])
+
+    async def testGetTrashedNodesFiltered(self):
+        trashed_dir = make_node(
+            node_id="d1", parent_id=None, name="dir", is_directory=True, is_trashed=True
+        )
+        child = make_node(
+            node_id="f1", parent_id="d1", name="file.txt", is_trashed=True
+        )
+        aexpect(self._ss.get_trashed_nodes).return_value = [trashed_dir, child]
+
+        rv = await self._drive.get_trashed_nodes(flatten=False)
+
+        self.assertEqual(rv, [trashed_dir])
+
     async def testResolvePath(self):
         path = Path("")
         aexpect(self._ss.resolve_path_by_id).return_value = path
@@ -274,11 +300,9 @@ class MoveTestCase(IsolatedAsyncioTestCase):
 
     async def testMoveRootNode(self):
         node = Mock(spec=Node)
-        node.is_trashed = True
         node.id = "123"
         aexpect(self._ss.get_root).return_value = node
         new_parent = Mock(spec=Node)
-        new_parent.is_trashed = False
 
         with self.assertRaises(ValueError):
             await self._drive.move(node, new_parent=new_parent, new_name="123")
@@ -595,7 +619,7 @@ class SyncTestCase(IsolatedAsyncioTestCase):
         aexpect(self._ss.get_current_cursor).return_value = ""
         node = Mock(spec=Node)
         aexpect(self._fs.get_root).return_value = node
-        changes = []
+        changes: list[ChangeAction] = []
         aexpect(self._fs.get_changes).return_value = to_async_iterable(changes)
         async for _ in self._drive.sync():
             pass
@@ -834,6 +858,63 @@ class MultiDriveSyncTestCase(IsolatedAsyncioTestCase):
             async for _ in self._drive.sync():
                 pass
 
+    async def testSyncBothSourcesEmitChanges(self):
+        google_fs = self._sources["google"].file_service
+        google_ss = self._sources["google"].snapshot_service
+        local_fs = self._sources["local"].file_service
+        local_ss = self._sources["local"].snapshot_service
+
+        aexpect(google_fs.is_authenticated).return_value = True
+        aexpect(local_fs.is_authenticated).return_value = True
+
+        google_node = make_node(node_id="g1", parent_id="groot", name="google_file.txt")
+        local_node = make_node(node_id="l1", parent_id="lroot", name="local_file.txt")
+
+        aexpect(google_fs.get_initial_cursor).return_value = "gcur0"
+        aexpect(google_ss.get_current_cursor).return_value = "gcur1"
+        aexpect(google_fs.get_changes).return_value = to_async_iterable(
+            [([(False, google_node), (True, "gremoved")], "gcur2")]
+        )
+
+        aexpect(local_fs.get_initial_cursor).return_value = "lcur0"
+        aexpect(local_ss.get_current_cursor).return_value = "lcur1"
+        aexpect(local_fs.get_changes).return_value = to_async_iterable(
+            [([(False, local_node), (True, "lremoved")], "lcur2")]
+        )
+
+        rv: list[ChangeAction] = []
+        async for change in self._drive.sync():
+            rv.append(change)
+
+        self.assertEqual(len(rv), 4)
+
+        ids = set()
+        for change in rv:
+            if change[0]:
+                ids.add(change[1])
+            else:
+                ids.add(change[1].id)
+
+        google_ids = {
+            c[1].id if not c[0] else c[1]
+            for c in rv
+            if (not c[0] and c[1].id.startswith("google:"))
+            or (c[0] and c[1].startswith("google:"))
+        }
+        local_ids = {
+            c[1].id if not c[0] else c[1]
+            for c in rv
+            if (not c[0] and c[1].id.startswith("local:"))
+            or (c[0] and c[1].startswith("local:"))
+        }
+
+        self.assertEqual(len(google_ids), 2)
+        self.assertEqual(len(local_ids), 2)
+        self.assertIn("google:g1", google_ids)
+        self.assertIn("google:gremoved", google_ids)
+        self.assertIn("local:l1", local_ids)
+        self.assertIn("local:lremoved", local_ids)
+
 
 class MultiDriveMoveTestCase(IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
@@ -911,6 +992,140 @@ class MultiDriveFindNodesTestCase(IsolatedAsyncioTestCase):
         ids = {n.id for n in results}
         self.assertIn("google:g1", ids)
         self.assertIn("local:l1", ids)
+
+
+class MultiDriveGetNodeByIdTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        ctx = create_mocked_multi_drive(["google", "local"])
+        self._drive, self._sources = await self.enterAsyncContext(ctx)
+
+    async def testGetNodeById(self):
+        backend_node = make_node(node_id="abc", parent_id="groot", name="file.txt")
+        aexpect(
+            self._sources["google"].snapshot_service.get_node_by_id
+        ).return_value = backend_node
+
+        result = await self._drive.get_node_by_id("google:abc")
+
+        self.assertEqual(result.id, "google:abc")
+        self.assertEqual(result.parent_id, "google:groot")
+        aexpect(
+            self._sources["google"].snapshot_service.get_node_by_id
+        ).assert_awaited_once_with("abc")
+
+    async def testGetNodeByIdUnknownSource(self):
+        with self.assertRaises(NodeNotFoundError):
+            await self._drive.get_node_by_id("unknown:abc")
+
+
+class MultiDriveGetTrashedNodesTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        ctx = create_mocked_multi_drive(["google", "local"])
+        self._drive, self._sources = await self.enterAsyncContext(ctx)
+
+    async def testGetTrashedNodesEmpty(self):
+        aexpect(
+            self._sources["google"].snapshot_service.get_trashed_nodes
+        ).return_value = []
+        aexpect(
+            self._sources["local"].snapshot_service.get_trashed_nodes
+        ).return_value = []
+
+        result = await self._drive.get_trashed_nodes()
+
+        self.assertEqual(result, [])
+
+    async def testGetTrashedNodesMerged(self):
+        google_node = make_node(
+            node_id="g1", parent_id="groot", name="google_trash.txt", is_trashed=True
+        )
+        local_node = make_node(
+            node_id="l1", parent_id="lroot", name="local_trash.txt", is_trashed=True
+        )
+        aexpect(
+            self._sources["google"].snapshot_service.get_trashed_nodes
+        ).return_value = [google_node]
+        aexpect(
+            self._sources["local"].snapshot_service.get_trashed_nodes
+        ).return_value = [local_node]
+
+        result = await self._drive.get_trashed_nodes()
+
+        ids = {n.id for n in result}
+        self.assertIn("google:g1", ids)
+        self.assertIn("local:l1", ids)
+
+    async def testGetTrashedNodesFlatten(self):
+        trashed_dir = make_node(
+            node_id="d1", parent_id=None, name="dir", is_directory=True, is_trashed=True
+        )
+        child = make_node(
+            node_id="f1", parent_id="d1", name="file.txt", is_trashed=True
+        )
+        aexpect(
+            self._sources["google"].snapshot_service.get_trashed_nodes
+        ).return_value = [trashed_dir, child]
+        aexpect(
+            self._sources["local"].snapshot_service.get_trashed_nodes
+        ).return_value = []
+
+        result = await self._drive.get_trashed_nodes(flatten=True)
+
+        ids = {n.id for n in result}
+        self.assertIn("google:d1", ids)
+        self.assertIn("google:f1", ids)
+
+    async def testGetTrashedNodesFiltered(self):
+        trashed_dir = make_node(
+            node_id="d1", parent_id=None, name="dir", is_directory=True, is_trashed=True
+        )
+        child = make_node(
+            node_id="f1", parent_id="d1", name="file.txt", is_trashed=True
+        )
+        aexpect(
+            self._sources["google"].snapshot_service.get_trashed_nodes
+        ).return_value = [trashed_dir, child]
+        aexpect(
+            self._sources["local"].snapshot_service.get_trashed_nodes
+        ).return_value = []
+
+        result = await self._drive.get_trashed_nodes(flatten=False)
+
+        ids = {n.id for n in result}
+        self.assertIn("google:d1", ids)
+        self.assertNotIn("google:f1", ids)
+
+
+class MultiDriveDeleteTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        ctx = create_mocked_multi_drive(["google", "local"])
+        self._drive, self._sources = await self.enterAsyncContext(ctx)
+
+    async def testUnauthorized(self):
+        aexpect(
+            self._sources["google"].file_service.is_authenticated
+        ).return_value = False
+        aexpect(
+            self._sources["local"].file_service.is_authenticated
+        ).return_value = True
+        node = make_node(
+            node_id="google:file1", parent_id="google:root", name="file.txt"
+        )
+
+        with self.assertRaises(AuthenticationError):
+            await self._drive.delete(node)
+
+    async def testSuccess(self):
+        node = make_node(
+            node_id="google:file1", parent_id="google:root", name="file.txt"
+        )
+
+        await self._drive.delete(node)
+
+        aexpect(self._sources["google"].file_service.delete).assert_awaited_once()
+        call_args = aexpect(self._sources["google"].file_service.delete).call_args
+        deleted_node = call_args[0][0]
+        self.assertEqual(deleted_node.id, "file1")
 
 
 def create_mocked_acm(rv: Mock) -> Mock:
