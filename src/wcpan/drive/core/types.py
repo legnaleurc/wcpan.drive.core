@@ -34,6 +34,7 @@ from collections.abc import (
     AsyncIterator,
     Awaitable,
     Callable,
+    Sequence,
 )
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
@@ -55,6 +56,7 @@ __all__ = (
     "PrivateDict",
     "ReadableFile",
     "RemoveAction",
+    "SourceConfig",
     "UpdateAction",
     "WritableFile",
 )
@@ -2148,3 +2150,27 @@ class Drive(metaclass=ABCMeta):
                 ...     await drive.authenticate()
                 >>> await drive.upload_file(...)
         """
+
+
+@dataclass(frozen=True, kw_only=True)
+class SourceConfig:
+    """Configuration for a single storage backend source.
+
+    Used with create_drive() to configure one or more storage backends.
+    In single-source mode, paths are unchanged. In multi-source mode
+    (2+ sources), each source's paths are prefixed with its name
+    (e.g., /google/docs/file.txt).
+
+    Attributes:
+        name: Source name used as path prefix in multi-source mode.
+        file: Factory function returning a FileService context manager.
+        snapshot: Factory function returning a SnapshotService context manager.
+        file_middleware: Optional middleware factories to wrap the FileService.
+        snapshot_middleware: Optional middleware factories to wrap the SnapshotService.
+    """
+
+    name: str
+    file: CreateFileService
+    snapshot: CreateSnapshotService
+    file_middleware: Sequence[CreateFileServiceMiddleware] | None = None
+    snapshot_middleware: Sequence[CreateSnapshotServiceMiddleware] | None = None

@@ -110,7 +110,8 @@ For detailed API documentation, see:
 from importlib.metadata import version
 
 from ._drive import create_drive
+from .types import SourceConfig
 
 
 __version__ = version(__package__ or __name__)
-__all__ = ("create_drive",)
+__all__ = ("SourceConfig", "create_drive")
