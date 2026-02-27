@@ -1,6 +1,6 @@
 [project]
 name = "wcpan-drive-core"
-version = "4.2.0"
+version = "5.0.0"
 description = "asynchronous generic cloud drive library"
 authors = [
     {name = "Wei-Cheng Pan", email = "legnaleurc@gmail.com"}
