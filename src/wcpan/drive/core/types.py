@@ -701,7 +701,7 @@ class Service(metaclass=ABCMeta):
                 >>> class MyFileService(FileService):
                 ...     @property
                 ...     def api_version(self) -> int:
-                ...         return 4
+                ...         return 5
         """
 
 
@@ -762,7 +762,7 @@ class FileService(Service, metaclass=ABCMeta):
 
     Implementations must:
         - Provide all abstract methods
-        - Return api_version = 4
+        - Return api_version = 5
         - Handle authentication appropriately
         - Support async context manager protocol
         - Raise appropriate exceptions on errors
@@ -779,7 +779,7 @@ class FileService(Service, metaclass=ABCMeta):
             >>> class MyCloudService(FileService):
             ...     @property
             ...     def api_version(self) -> int:
-            ...         return 4
+            ...         return 5
             ...
             ...     async def get_root(self) -> Node:
             ...         # Fetch root from API
@@ -1224,7 +1224,7 @@ class SnapshotService(Service, metaclass=ABCMeta):
             >>> class SQLiteSnapshot(SnapshotService):
             ...     @property
             ...     def api_version(self) -> int:
-            ...         return 4
+            ...         return 5
             ...
             ...     async def get_root(self) -> Node:
             ...         # Query from database

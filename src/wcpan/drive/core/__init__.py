@@ -81,7 +81,7 @@ Implementing Services:
         >>> class MyCloudService(FileService):
         ...     @property
         ...     def api_version(self) -> int:
-        ...         return 4
+        ...         return 5
         ...
         ...     async def get_root(self) -> Node:
         ...         # Implement cloud API calls
