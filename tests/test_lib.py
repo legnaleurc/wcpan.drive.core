@@ -1,5 +1,7 @@
+from collections.abc import AsyncGenerator, Callable, Coroutine
 from datetime import datetime, timezone
 from pathlib import PurePath
+from typing import Any
 from unittest import IsolatedAsyncioTestCase, TestCase
 from unittest.mock import AsyncMock, MagicMock
 
@@ -14,7 +16,7 @@ from wcpan.drive.core.lib import (
     move_node,
     normalize_path,
 )
-from wcpan.drive.core.types import Drive, Node
+from wcpan.drive.core.types import Drive, Node, RemoveAction, UpdateAction
 
 
 def make_node(
@@ -47,7 +49,7 @@ def make_node(
 
 
 class TestUtilities(TestCase):
-    def testIsValidName(self):
+    def testIsValidName(self) -> None:
         ok = is_valid_name("name")
         self.assertTrue(ok)
 
@@ -65,57 +67,57 @@ class TestUtilities(TestCase):
 
 
 class TestNormalizePath(TestCase):
-    def testDot(self):
+    def testDot(self) -> None:
         result = normalize_path(PurePath("/a/./b"))
         self.assertEqual(result, PurePath("/a/b"))
 
-    def testDotDot(self):
+    def testDotDot(self) -> None:
         result = normalize_path(PurePath("/a/b/../c"))
         self.assertEqual(result, PurePath("/a/c"))
 
-    def testMixed(self):
+    def testMixed(self) -> None:
         result = normalize_path(PurePath("/a/b/../../c/./d"))
         self.assertEqual(result, PurePath("/c/d"))
 
-    def testRelativeRaises(self):
+    def testRelativeRaises(self) -> None:
         with self.assertRaises(ValueError):
             normalize_path(PurePath("relative"))
 
-    def testRoot(self):
+    def testRoot(self) -> None:
         result = normalize_path(PurePath("/"))
         self.assertEqual(result, PurePath("/"))
 
 
 class TestElseNone(IsolatedAsyncioTestCase):
-    async def testSuccess(self):
+    async def testSuccess(self) -> None:
         mock = AsyncMock(return_value=42)
         result = await else_none(mock())
         self.assertEqual(result, 42)
 
-    async def testNodeNotFound(self):
+    async def testNodeNotFound(self) -> None:
         mock = AsyncMock(side_effect=NodeNotFoundError("missing"))
         result = await else_none(mock())
         self.assertIsNone(result)
 
 
 class TestTypeGuards(TestCase):
-    def testIsRemove(self):
-        change = (True, "some-id")
+    def testIsRemove(self) -> None:
+        change: RemoveAction = (True, "some-id")
         self.assertTrue(is_remove(change))
         self.assertFalse(is_update(change))
 
-    def testIsUpdate(self):
+    def testIsUpdate(self) -> None:
         node = make_node(node_id="abc")
-        change = (False, node)
+        change: UpdateAction = (False, node)
         self.assertTrue(is_update(change))
         self.assertFalse(is_remove(change))
 
 
 class TestDispatchChange(TestCase):
-    def testDispatchRemove(self):
+    def testDispatchRemove(self) -> None:
         on_remove = MagicMock(return_value="removed")
         on_update = MagicMock(return_value="updated")
-        change = (True, "node-id")
+        change: RemoveAction = (True, "node-id")
 
         result = dispatch_change(change, on_remove=on_remove, on_update=on_update)
 
@@ -123,11 +125,11 @@ class TestDispatchChange(TestCase):
         on_remove.assert_called_once_with("node-id")
         on_update.assert_not_called()
 
-    def testDispatchUpdate(self):
+    def testDispatchUpdate(self) -> None:
         node = make_node(node_id="abc")
         on_remove = MagicMock(return_value="removed")
         on_update = MagicMock(return_value="updated")
-        change = (False, node)
+        change: UpdateAction = (False, node)
 
         result = dispatch_change(change, on_remove=on_remove, on_update=on_update)
 
@@ -140,7 +142,7 @@ class TestMoveNode(IsolatedAsyncioTestCase):
     def _make_drive(self) -> AsyncMock:
         return AsyncMock(spec=Drive)
 
-    async def testRenameOnly(self):
+    async def testRenameOnly(self) -> None:
         drive = self._make_drive()
         src_node = make_node(node_id="src", parent_id="par", name="old.txt")
         renamed = make_node(node_id="src", parent_id="par", name="new.txt")
@@ -161,7 +163,7 @@ class TestMoveNode(IsolatedAsyncioTestCase):
             src_node, new_parent=parent_node, new_name="new.txt"
         )
 
-    async def testNoop(self):
+    async def testNoop(self) -> None:
         drive = self._make_drive()
         src_node = make_node(node_id="src", parent_id="par", name="file.txt")
         parent_node = make_node(node_id="par", name="a", is_directory=True)
@@ -179,7 +181,7 @@ class TestMoveNode(IsolatedAsyncioTestCase):
             src_node, new_parent=parent_node, new_name=None
         )
 
-    async def testMoveToParent(self):
+    async def testMoveToParent(self) -> None:
         drive = self._make_drive()
         src_node = make_node(node_id="src", parent_id="b", name="file.txt")
         grandparent = make_node(node_id="a", name="a", is_directory=True)
@@ -199,7 +201,7 @@ class TestMoveNode(IsolatedAsyncioTestCase):
             src_node, new_parent=grandparent, new_name=None
         )
 
-    async def testMoveAbsoluteIntoDirectory(self):
+    async def testMoveAbsoluteIntoDirectory(self) -> None:
         drive = self._make_drive()
         src_node = make_node(node_id="src", parent_id="a", name="file.txt")
         dst_dir = make_node(node_id="dst", name="dir", is_directory=True)
@@ -219,7 +221,7 @@ class TestMoveNode(IsolatedAsyncioTestCase):
             src_node, new_parent=dst_dir, new_name=None
         )
 
-    async def testMoveAbsoluteNewName(self):
+    async def testMoveAbsoluteNewName(self) -> None:
         drive = self._make_drive()
         src_node = make_node(node_id="src", parent_id="a", name="file.txt")
         new_parent = make_node(node_id="b", name="b", is_directory=True)
@@ -242,7 +244,7 @@ class TestMoveNode(IsolatedAsyncioTestCase):
             src_node, new_parent=new_parent, new_name="renamed.txt"
         )
 
-    async def testMoveAbsoluteParentMissing(self):
+    async def testMoveAbsoluteParentMissing(self) -> None:
         drive = self._make_drive()
         src_node = make_node(node_id="src", parent_id="a", name="file.txt")
         aexpect(drive.get_node_by_path).side_effect = _path_map(
@@ -258,7 +260,7 @@ class TestMoveNode(IsolatedAsyncioTestCase):
                 drive, PurePath("/a/file.txt"), PurePath("/missing/new.txt")
             )
 
-    async def testMoveAbsoluteDestIsFile(self):
+    async def testMoveAbsoluteDestIsFile(self) -> None:
         drive = self._make_drive()
         src_node = make_node(node_id="src", parent_id="a", name="file.txt")
         dst_file = make_node(
@@ -276,7 +278,7 @@ class TestMoveNode(IsolatedAsyncioTestCase):
 
 
 class TestFindDuplicateNodes(IsolatedAsyncioTestCase):
-    async def testNoDuplicates(self):
+    async def testNoDuplicates(self) -> None:
         drive = MagicMock(spec=Drive)
         root = make_node(node_id="root", is_directory=True)
         file1 = make_node(node_id="f1", parent_id="root", name="a.txt")
@@ -287,7 +289,7 @@ class TestFindDuplicateNodes(IsolatedAsyncioTestCase):
 
         self.assertEqual(result, [])
 
-    async def testWithDuplicates(self):
+    async def testWithDuplicates(self) -> None:
         drive = MagicMock(spec=Drive)
         root = make_node(node_id="root", is_directory=True)
         file1 = make_node(node_id="f1", parent_id="root", name="dup.txt")
@@ -300,7 +302,7 @@ class TestFindDuplicateNodes(IsolatedAsyncioTestCase):
         self.assertIn(file1, result[0])
         self.assertIn(file2, result[0])
 
-    async def testDefaultRoot(self):
+    async def testDefaultRoot(self) -> None:
         drive = MagicMock(spec=Drive)
         root = make_node(node_id="root", is_directory=True)
         drive.get_root = AsyncMock(return_value=root)
@@ -311,13 +313,15 @@ class TestFindDuplicateNodes(IsolatedAsyncioTestCase):
         drive.get_root.assert_awaited_once_with()
 
 
-async def _async_walk_results(items):
+async def _async_walk_results(
+    items: list[Any],
+) -> AsyncGenerator[Any, None]:
     for item in items:
         yield item
 
 
-def _path_map(mapping: dict) -> object:
-    async def side_effect(path):
+def _path_map(mapping: dict[Any, Any]) -> Callable[[Any], Coroutine[Any, Any, Any]]:
+    async def side_effect(path: Any) -> Any:
         value = mapping.get(path)
         if isinstance(value, Exception):
             raise value
