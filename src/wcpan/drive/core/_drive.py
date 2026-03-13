@@ -41,6 +41,29 @@ _API_VERSION = 5
 _VIRTUAL_ROOT_ID = ""
 
 
+def compose_service[T: Service](
+    base: CreateService[T],
+    *middleware: CreateServiceMiddleware[T],
+) -> CreateService[T]:
+    @asynccontextmanager
+    async def _factory() -> AsyncIterator[T]:
+        async with AsyncExitStack() as stack:
+            service = await stack.enter_async_context(base())
+            if service.api_version != _API_VERSION:
+                raise InvalidServiceError(
+                    f"invalid version: required {_API_VERSION}, got {service.api_version}"
+                )
+            for mw in middleware:
+                service = await stack.enter_async_context(mw(service))
+                if service.api_version != _API_VERSION:
+                    raise InvalidServiceError(
+                        f"invalid version: required {_API_VERSION}, got {service.api_version}"
+                    )
+            yield service
+
+    return _factory
+
+
 @asynccontextmanager
 async def create_drive(
     sources: Sequence[SourceConfig],
@@ -68,14 +91,8 @@ async def create_drive(
     if len(sources) == 1:
         source = sources[0]
         async with (
-            _create_service(
-                create_service=source.snapshot,
-                middleware_list=source.snapshot_middleware,
-            ) as snapshot_service,
-            _create_service(
-                create_service=source.file,
-                middleware_list=source.file_middleware,
-            ) as file_service,
+            _create_service(source.snapshot) as snapshot_service,
+            _create_service(source.file) as file_service,
         ):
             yield _SingleDrive(
                 file_service=file_service, snapshot_service=snapshot_service
@@ -84,18 +101,8 @@ async def create_drive(
         async with AsyncExitStack() as stack:
             source_states: dict[str, _SourceState] = {}
             for source in sources:
-                ss = await stack.enter_async_context(
-                    _create_service(
-                        create_service=source.snapshot,
-                        middleware_list=source.snapshot_middleware,
-                    )
-                )
-                fs = await stack.enter_async_context(
-                    _create_service(
-                        create_service=source.file,
-                        middleware_list=source.file_middleware,
-                    )
-                )
+                ss = await stack.enter_async_context(_create_service(source.snapshot))
+                fs = await stack.enter_async_context(_create_service(source.file))
                 source_states[source.name] = _SourceState(
                     file_service=fs, snapshot_service=ss
                 )
@@ -103,27 +110,12 @@ async def create_drive(
 
 
 @asynccontextmanager
-async def _create_service[T: Service](
-    create_service: CreateService[T],
-    middleware_list: Sequence[CreateServiceMiddleware[T]] | None,
-):
-    async with AsyncExitStack() as stack:
-        service = await stack.enter_async_context(create_service())
+async def _create_service[T: Service](create_service: CreateService[T]):
+    async with create_service() as service:
         if service.api_version != _API_VERSION:
             raise InvalidServiceError(
                 f"invalid version: required {_API_VERSION}, got {service.api_version}"
             )
-
-        if not middleware_list:
-            middleware_list = []
-
-        for create_middleware in middleware_list:
-            service = await stack.enter_async_context(create_middleware(service))
-            if service.api_version != _API_VERSION:
-                raise InvalidServiceError(
-                    f"invalid version: required {_API_VERSION}, got {service.api_version}"
-                )
-
         yield service
 
 

@@ -6,7 +6,7 @@ from typing import AsyncIterable, cast
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
-from wcpan.drive.core._drive import _VIRTUAL_ROOT_ID, create_drive
+from wcpan.drive.core._drive import _VIRTUAL_ROOT_ID, compose_service, create_drive
 from wcpan.drive.core.exceptions import (
     AuthenticationError,
     NodeExistsError,
@@ -72,16 +72,16 @@ class CreateDriveTestCase(IsolatedAsyncioTestCase):
             sources=[
                 SourceConfig(
                     name="main",
-                    file=create_file_service,
-                    snapshot=create_snapshot_service,
-                    file_middleware=[
+                    file=compose_service(
+                        create_file_service,
                         create_file_service_middleware_1,
                         create_file_service_middleware_2,
-                    ],
-                    snapshot_middleware=[
+                    ),
+                    snapshot=compose_service(
+                        create_snapshot_service,
                         create_snapshot_service_middleware_1,
                         create_snapshot_service_middleware_2,
-                    ],
+                    ),
                 )
             ]
         ):

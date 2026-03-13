@@ -34,7 +34,6 @@ from collections.abc import (
     AsyncIterator,
     Awaitable,
     Callable,
-    Sequence,
 )
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
@@ -2165,12 +2164,8 @@ class SourceConfig:
         name: Source name used as path prefix in multi-source mode.
         file: Factory function returning a FileService context manager.
         snapshot: Factory function returning a SnapshotService context manager.
-        file_middleware: Optional middleware factories to wrap the FileService.
-        snapshot_middleware: Optional middleware factories to wrap the SnapshotService.
     """
 
     name: str
     file: CreateFileService
     snapshot: CreateSnapshotService
-    file_middleware: Sequence[CreateFileServiceMiddleware] | None = None
-    snapshot_middleware: Sequence[CreateSnapshotServiceMiddleware] | None = None
