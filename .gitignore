@@ -5,3 +5,4 @@
 /.venv
 .python-version
 /.vscode
+/docs/_build

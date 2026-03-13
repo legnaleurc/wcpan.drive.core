@@ -1,13 +1,14 @@
 RM := rm -rf
 PYTHON := uv run python3
 RUFF := uv run ruff
+SPHINX := uv run sphinx-build
 
 PKG_FILES := pyproject.toml
 PKG_LOCK := uv.lock
 ENV_DIR := .venv
 ENV_LOCK := $(ENV_DIR)/pyvenv.cfg
 
-.PHONY: all format lint clean purge test build publish venv
+.PHONY: all format lint clean purge test build publish venv docs
 
 all: venv
 
@@ -19,8 +20,12 @@ lint: venv
 	$(RUFF) format --check tests src/wcpan
 	$(RUFF) check tests src/wcpan
 
+docs:
+	uv sync --group docs
+	$(SPHINX) -b html docs docs/_build/html
+
 clean:
-	$(RM) ./dist ./build ./*.egg-info
+	$(RM) ./dist ./build ./*.egg-info ./docs/_build
 
 purge: clean
 	$(RM) $(ENV_DIR)

@@ -24,6 +24,10 @@ source = "https://github.com/legnaleurc/wcpan.drive.core"
 dev = [
     "ruff>=0.15.0,<1.0.0",
 ]
+docs = [
+    "furo",
+    "sphinx",
+]
 
 [build-system]
 requires = ["hatchling"]
