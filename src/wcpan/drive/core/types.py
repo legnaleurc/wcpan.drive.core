@@ -2155,7 +2155,7 @@ class Drive(metaclass=ABCMeta):
 class SourceConfig:
     """Configuration for a single storage backend source.
 
-    Used with create_drive() to configure one or more storage backends.
+    Used with create_multi_drive() to configure one or more storage backends.
     In single-source mode, paths are unchanged. In multi-source mode
     (2+ sources), each source's paths are prefixed with its name
     (e.g., /google/docs/file.txt).

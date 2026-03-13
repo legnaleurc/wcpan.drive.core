@@ -34,11 +34,11 @@ Architecture:
 Quick Start:
     Basic usage pattern::
 
-        >>> from wcpan.drive.core import create_drive
+        >>> from wcpan.drive.core import create_single_drive
         >>> from pathlib import Path, PurePath
         >>>
         >>> # Create drive with your service implementations
-        >>> async with create_drive(
+        >>> async with create_single_drive(
         ...     file=create_my_file_service,
         ...     snapshot=create_my_snapshot_service,
         ... ) as drive:
@@ -98,7 +98,8 @@ Implementing Services:
         ...         await service.cleanup()
 
 Available Imports:
-    - create_drive: Main entry point for creating Drive instances
+    - create_drive: Entry point for single-source Drive instances
+    - create_multi_drive: Entry point for multi-source Drive instances
 
 For detailed API documentation, see:
     - Drive interface: wcpan.drive.core.types.Drive
@@ -109,9 +110,9 @@ For detailed API documentation, see:
 
 from importlib.metadata import version
 
-from ._drive import compose_service, create_drive
+from ._drive import compose_service, create_drive, create_multi_drive
 from .types import SourceConfig
 
 
 __version__ = version(__package__ or __name__)
-__all__ = ("SourceConfig", "compose_service", "create_drive")
+__all__ = ("SourceConfig", "compose_service", "create_drive", "create_multi_drive")

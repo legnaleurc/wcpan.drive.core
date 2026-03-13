@@ -21,9 +21,11 @@ from .lib import (
 )
 from .types import (
     ChangeAction,
+    CreateFileService,
     CreateHasher,
     CreateService,
     CreateServiceMiddleware,
+    CreateSnapshotService,
     Drive,
     FileService,
     MediaInfo,
@@ -65,7 +67,7 @@ def compose_service[T: Service](
 
 
 @asynccontextmanager
-async def create_drive(
+async def create_multi_drive(
     sources: Sequence[SourceConfig],
 ) -> AsyncIterator[Drive]:
     """Create a configured Drive instance for cloud storage operations.
@@ -107,6 +109,32 @@ async def create_drive(
                     file_service=fs, snapshot_service=ss
                 )
             yield _MultiDrive(source_states)
+
+
+@asynccontextmanager
+async def create_drive(
+    *,
+    file: CreateFileService,
+    snapshot: CreateSnapshotService,
+) -> AsyncIterator[Drive]:
+    """Create a configured Drive instance for single-source usage.
+
+    Args:
+        file: Factory function returning a FileService context manager.
+              Also accepts the output of compose_service().
+        snapshot: Factory function returning a SnapshotService context manager.
+                  Also accepts the output of compose_service().
+
+    Yields:
+        A fully configured Drive instance ready for operations.
+
+    Raises:
+        InvalidServiceError: If the service reports an incompatible API version.
+    """
+    async with create_multi_drive(
+        sources=[SourceConfig(name="", file=file, snapshot=snapshot)]
+    ) as drive:
+        yield drive
 
 
 @asynccontextmanager
