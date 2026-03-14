@@ -437,7 +437,7 @@ wheels = [
 
 [[package]]
 name = "wcpan-drive-core"
-version = "5.0.2"
+version = "5.0.3"
 source = { editable = "." }
 
 [package.dev-dependencies]
