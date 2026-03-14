@@ -80,7 +80,8 @@ accounts into a single virtual drive:
 
 .. code-block:: python
 
-   from wcpan.drive.core import create_multi_drive, SourceConfig
+   from wcpan.drive.core import create_multi_drive
+   from wcpan.drive.core.types import SourceConfig
 
    async with create_multi_drive(
        sources=[
