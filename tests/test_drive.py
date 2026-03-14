@@ -154,8 +154,9 @@ class GetHasherTestCase(IsolatedAsyncioTestCase):
         )
 
     async def testGetHasherFactory(self) -> None:
+        node = make_node(node_id="abc")
         aexpect(self._fs.get_hasher_factory).return_value = 42
-        rv = await self._drive.get_hasher_factory()
+        rv = await self._drive.get_hasher_factory(node)
 
         self.assertEqual(rv, 42)
 
@@ -1097,6 +1098,38 @@ class MultiDriveGetTrashedNodesTestCase(IsolatedAsyncioTestCase):
         ids = {n.id for n in result}
         self.assertIn("google:d1", ids)
         self.assertNotIn("google:f1", ids)
+
+
+class MultiDriveGetHasherTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        ctx = create_mocked_multi_drive(["google", "local"])
+        self._drive, self._sources = await self.enterAsyncContext(ctx)
+
+    async def testGetHasherFactory(self) -> None:
+        node = make_node(node_id="local:file1", parent_id="local:root", name="file.txt")
+        aexpect(
+            self._sources["local"].file_service.get_hasher_factory
+        ).return_value = 99
+        rv = await self._drive.get_hasher_factory(node)
+
+        self.assertEqual(rv, 99)
+        aexpect(
+            self._sources["google"].file_service.get_hasher_factory
+        ).assert_not_awaited()
+
+    async def testGetHasherFactoryRoutesToCorrectSource(self) -> None:
+        google_node = make_node(node_id="google:g1", parent_id="google:root")
+        local_node = make_node(node_id="local:l1", parent_id="local:root")
+        aexpect(
+            self._sources["google"].file_service.get_hasher_factory
+        ).return_value = 1
+        aexpect(self._sources["local"].file_service.get_hasher_factory).return_value = 2
+
+        rv_google = await self._drive.get_hasher_factory(google_node)
+        rv_local = await self._drive.get_hasher_factory(local_node)
+
+        self.assertEqual(rv_google, 1)
+        self.assertEqual(rv_local, 2)
 
 
 class MultiDriveDeleteTestCase(IsolatedAsyncioTestCase):

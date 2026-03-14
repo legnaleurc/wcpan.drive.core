@@ -458,7 +458,7 @@ class _SingleDrive(Drive):
                     yield change
 
     @override
-    async def get_hasher_factory(self) -> CreateHasher:
+    async def get_hasher_factory(self, node: Node) -> CreateHasher:
         return await self._fs.get_hasher_factory()
 
     @override
@@ -830,9 +830,12 @@ class _MultiDrive(Drive):
                     yield item
 
     @override
-    async def get_hasher_factory(self) -> CreateHasher:
-        first_state = next(iter(self._sources.values()))
-        return await first_state.file_service.get_hasher_factory()
+    async def get_hasher_factory(self, node: Node) -> CreateHasher:
+        source_name, _ = _parse_id(node.id)
+        if source_name not in self._sources:
+            raise NodeNotFoundError(node.id)
+        state = self._sources[source_name]
+        return await state.file_service.get_hasher_factory()
 
     @override
     async def is_authenticated(self) -> bool:

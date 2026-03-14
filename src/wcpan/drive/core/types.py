@@ -2040,11 +2040,14 @@ class Drive(metaclass=ABCMeta):
         """
 
     @abstractmethod
-    async def get_hasher_factory(self) -> CreateHasher:
-        """Get a factory for creating hash calculators.
+    async def get_hasher_factory(self, node: Node) -> CreateHasher:
+        """Get a factory for creating hash calculators for a given node.
 
-        Returns a factory function compatible with the service's hash
-        algorithm for verifying file integrity.
+        Returns a factory function compatible with the hash algorithm used
+        by the backend that owns the node.
+
+        Args:
+            node: The node whose backend's hasher factory is returned.
 
         Returns:
             Factory function for creating Hasher instances.
@@ -2052,7 +2055,7 @@ class Drive(metaclass=ABCMeta):
         Example:
             Computing file hash::
 
-                >>> hasher_factory = await drive.get_hasher_factory()
+                >>> hasher_factory = await drive.get_hasher_factory(node)
                 >>> hasher = await hasher_factory()
                 >>> with open("file.txt", "rb") as f:
                 ...     while chunk := f.read(8192):
