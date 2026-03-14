@@ -31,6 +31,9 @@ Data Classes
 .. autoclass:: wcpan.drive.core.types.Node
    :no-members:
 
+.. autoclass:: wcpan.drive.core.types.SourceConfig
+   :no-members:
+
 .. autoclass:: wcpan.drive.core.types.MediaInfo
    :members:
 

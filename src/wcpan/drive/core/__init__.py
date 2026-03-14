@@ -101,6 +101,8 @@ Available Imports:
     - create_drive: Entry point for single-source Drive instances
     - create_multi_drive: Entry point for multi-source Drive instances
 
+    Types such as Drive and SourceConfig are available in wcpan.drive.core.types.
+
 For detailed API documentation, see:
     - Drive interface: wcpan.drive.core.types.Drive
     - Utility functions: wcpan.drive.core.lib
@@ -111,8 +113,7 @@ For detailed API documentation, see:
 from importlib.metadata import version
 
 from ._drive import compose_service, create_drive, create_multi_drive
-from .types import SourceConfig
 
 
 __version__ = version(__package__ or __name__)
-__all__ = ("SourceConfig", "compose_service", "create_drive", "create_multi_drive")
+__all__ = ("compose_service", "create_drive", "create_multi_drive")
