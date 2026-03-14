@@ -387,11 +387,18 @@ class _SingleDrive(Drive):
         await self._fs.purge_trash()
 
     @override
-    async def delete(self, node: Node) -> None:
+    async def delete(self, node: Node, *, permanent: bool = False) -> None:
         if not await self.is_authenticated():
             raise AuthenticationError()
 
-        await self._fs.delete(node)
+        await self._fs.delete(node, permanent=permanent)
+
+    @override
+    async def restore(self, node: Node) -> Node:
+        if not await self.is_authenticated():
+            raise AuthenticationError()
+
+        return await self._fs.restore(node)
 
     @override
     async def move(
@@ -400,13 +407,12 @@ class _SingleDrive(Drive):
         *,
         new_parent: Node | None = None,
         new_name: str | None = None,
-        trashed: bool | None = None,
     ) -> Node:
         # sanity check
         if not await self.is_authenticated():
             raise AuthenticationError()
 
-        if not new_parent and not new_name and trashed is None:
+        if not new_parent and not new_name:
             raise ValueError("nothing to move")
 
         if new_name and not is_valid_name(new_name):
@@ -417,8 +423,6 @@ class _SingleDrive(Drive):
             raise ValueError("root node is immutable")
 
         if new_parent:
-            if new_parent.is_trashed != node.is_trashed:
-                raise ValueError("cannot move accross trash")
             if not new_parent.is_directory:
                 raise ValueError("new_parent is not a directory")
             if await _contains(self, node, new_parent):
@@ -428,7 +432,6 @@ class _SingleDrive(Drive):
             node,
             new_parent=new_parent,
             new_name=new_name,
-            trashed=trashed,
         )
 
     @override
@@ -709,7 +712,7 @@ class _MultiDrive(Drive):
             await state.file_service.purge_trash()
 
     @override
-    async def delete(self, node: Node) -> None:
+    async def delete(self, node: Node, *, permanent: bool = False) -> None:
         if not await self.is_authenticated():
             raise AuthenticationError()
 
@@ -718,7 +721,20 @@ class _MultiDrive(Drive):
             raise NodeNotFoundError(node.id)
         state = self._sources[source_name]
         unscoped_node = _unscope_node(source_name, node)
-        await state.file_service.delete(unscoped_node)
+        await state.file_service.delete(unscoped_node, permanent=permanent)
+
+    @override
+    async def restore(self, node: Node) -> Node:
+        if not await self.is_authenticated():
+            raise AuthenticationError()
+
+        source_name, _ = _parse_id(node.id)
+        if source_name not in self._sources:
+            raise NodeNotFoundError(node.id)
+        state = self._sources[source_name]
+        unscoped_node = _unscope_node(source_name, node)
+        result = await state.file_service.restore(unscoped_node)
+        return _scope_node(source_name, result)
 
     @override
     async def move(
@@ -727,12 +743,11 @@ class _MultiDrive(Drive):
         *,
         new_parent: Node | None = None,
         new_name: str | None = None,
-        trashed: bool | None = None,
     ) -> Node:
         if not await self.is_authenticated():
             raise AuthenticationError()
 
-        if not new_parent and not new_name and trashed is None:
+        if not new_parent and not new_name:
             raise ValueError("nothing to move")
 
         if new_name and not is_valid_name(new_name):
@@ -752,8 +767,6 @@ class _MultiDrive(Drive):
             new_parent_source, _ = _parse_id(new_parent.id)
             if new_parent_source != source_name:
                 raise ValueError("cannot move across sources")
-            if new_parent.is_trashed != node.is_trashed:
-                raise ValueError("cannot move accross trash")
             if not new_parent.is_directory:
                 raise ValueError("new_parent is not a directory")
             if await _contains(self, node, new_parent):
@@ -771,7 +784,6 @@ class _MultiDrive(Drive):
             unscoped_node,
             new_parent=unscoped_new_parent,
             new_name=new_name,
-            trashed=trashed,
         )
         return _scope_node(source_name, result)
 

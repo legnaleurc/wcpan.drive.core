@@ -318,9 +318,7 @@ class MoveTestCase(IsolatedAsyncioTestCase):
         aexpect(self._fs.is_authenticated).return_value = False
 
         with self.assertRaises(AuthenticationError):
-            await self._drive.move(
-                node, new_parent=new_parent, new_name="123", trashed=True
-            )
+            await self._drive.move(node, new_parent=new_parent, new_name="123")
 
     async def testNoArgs(self) -> None:
         node = Mock(spec=Node)
@@ -345,9 +343,7 @@ class MoveTestCase(IsolatedAsyncioTestCase):
             rv = await self._drive.move(node, new_parent=new_parent)
 
         self.assertEqual(rv, 42)
-        self._move.assert_awaited_once_with(
-            node, new_parent=new_parent, new_name=None, trashed=None
-        )
+        self._move.assert_awaited_once_with(node, new_parent=new_parent, new_name=None)
 
     async def testMoveToNewName(self) -> None:
         node = Mock(spec=Node)
@@ -358,9 +354,7 @@ class MoveTestCase(IsolatedAsyncioTestCase):
         rv = await self._drive.move(node, new_name="456")
 
         self.assertEqual(rv, 42)
-        self._move.assert_awaited_once_with(
-            node, new_parent=None, new_name="456", trashed=None
-        )
+        self._move.assert_awaited_once_with(node, new_parent=None, new_name="456")
 
     async def testMoveToNewParentAndNewName(self) -> None:
         node = Mock(spec=Node)
@@ -376,18 +370,7 @@ class MoveTestCase(IsolatedAsyncioTestCase):
             rv = await self._drive.move(node, new_parent=new_parent, new_name="789")
 
         self.assertEqual(rv, 42)
-        self._move.assert_awaited_once_with(
-            node, new_parent=new_parent, new_name="789", trashed=None
-        )
-
-    async def testTrash(self) -> None:
-        node = Mock(spec=Node)
-        node.id = "123"
-
-        await self._drive.move(node, trashed=True)
-        aexpect(self._fs.move).assert_awaited_once_with(
-            node, new_parent=None, new_name=None, trashed=True
-        )
+        self._move.assert_awaited_once_with(node, new_parent=new_parent, new_name="789")
 
 
 class PurgeTrashTestCase(IsolatedAsyncioTestCase):
@@ -424,7 +407,37 @@ class DeleteTestCase(IsolatedAsyncioTestCase):
         node = Mock(spec=Node)
 
         await self._drive.delete(node)
-        aexpect(self._fs.delete).assert_awaited_once_with(node)
+        aexpect(self._fs.delete).assert_awaited_once_with(node, permanent=False)
+
+    async def testPermanent(self) -> None:
+        node = Mock(spec=Node)
+
+        await self._drive.delete(node, permanent=True)
+        aexpect(self._fs.delete).assert_awaited_once_with(node, permanent=True)
+
+
+class RestoreTestCase(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self._drive, self._fs, self._ss = await self.enterAsyncContext(
+            create_mocked_drive()
+        )
+
+    async def testUnauthorized(self) -> None:
+        node = Mock(spec=Node)
+        aexpect(self._fs.is_authenticated).return_value = False
+
+        with self.assertRaises(AuthenticationError):
+            await self._drive.restore(node)
+
+    async def testSuccess(self) -> None:
+        node = Mock(spec=Node)
+        restored = Mock(spec=Node)
+        aexpect(self._fs.restore).return_value = restored
+
+        rv = await self._drive.restore(node)
+
+        self.assertEqual(rv, restored)
+        aexpect(self._fs.restore).assert_awaited_once_with(node)
 
 
 class CreateDirectoryTestCase(IsolatedAsyncioTestCase):
@@ -1116,6 +1129,7 @@ class MultiDriveDeleteTestCase(IsolatedAsyncioTestCase):
         call_args = aexpect(self._sources["google"].file_service.delete).call_args
         deleted_node = call_args[0][0]
         self.assertEqual(deleted_node.id, "file1")
+        self.assertEqual(call_args[1]["permanent"], False)
 
 
 def create_mocked_acm(rv: Mock) -> Mock:

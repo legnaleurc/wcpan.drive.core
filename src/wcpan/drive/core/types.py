@@ -896,14 +896,12 @@ class FileService(Service, metaclass=ABCMeta):
         *,
         new_parent: Node | None,
         new_name: str | None,
-        trashed: bool | None,
     ) -> Node:
-        """Modify node properties (rename, move, trash/restore).
+        """Relocate or rename a node.
 
         Performs one or more operations on the node:
         - Rename: Set new_name to change the node's name
         - Move: Set new_parent to move to a different directory
-        - Trash: Set trashed=True to move to trash, False to restore
 
         At least one of the optional parameters must be non-None.
 
@@ -911,7 +909,6 @@ class FileService(Service, metaclass=ABCMeta):
             node: The Node to modify.
             new_parent: New parent directory, or None to keep current parent.
             new_name: New name, or None to keep current name.
-            trashed: True to trash, False to restore, None to leave unchanged.
 
         Returns:
             New Node instance reflecting the changes.
@@ -919,48 +916,36 @@ class FileService(Service, metaclass=ABCMeta):
         Raises:
             AuthenticationError: If not authenticated.
             ValueError: If all optional parameters are None.
-
-        Example:
-            Implementation pattern::
-
-                >>> async def move(
-                ...     self,
-                ...     node: Node,
-                ...     *,
-                ...     new_parent: Node | None,
-                ...     new_name: str | None,
-                ...     trashed: bool | None,
-                ... ) -> Node:
-                ...     updates = {}
-                ...     if new_name:
-                ...         updates["name"] = new_name
-                ...     if new_parent:
-                ...         updates["parent_id"] = new_parent.id
-                ...     if trashed is not None:
-                ...         updates["trashed"] = trashed
-                ...     response = await self.api_client.update(node.id, updates)
-                ...     return self._api_response_to_node(response)
         """
 
     @abstractmethod
-    async def delete(self, node: Node) -> None:
-        """Permanently delete a node.
+    async def delete(self, node: Node, *, permanent: bool = False) -> None:
+        """Delete a node.
 
-        Removes the node from the cloud storage permanently. This operation
-        cannot be undone. For recoverable deletion, use move() with
-        trashed=True instead.
+        Soft-deletes by default (best-effort per backend). Pass permanent=True
+        for a hard delete that cannot be undone.
 
         Args:
-            node: The Node to permanently delete.
+            node: The Node to delete.
+            permanent: If True, permanently delete. If False (default),
+                soft-delete (e.g. move to trash).
 
         Raises:
             AuthenticationError: If not authenticated.
+        """
 
-        Example:
-            Implementation pattern::
+    @abstractmethod
+    async def restore(self, node: Node) -> Node:
+        """Restore a trashed node.
 
-                >>> async def delete(self, node: Node) -> None:
-                ...     await self.api_client.delete(node.id)
+        Args:
+            node: The trashed Node to restore.
+
+        Returns:
+            Updated Node instance reflecting the restored state.
+
+        Raises:
+            NotImplementedError: If backend doesn't support restore.
         """
 
     @abstractmethod
@@ -1968,18 +1953,15 @@ class Drive(metaclass=ABCMeta):
         *,
         new_parent: Node | None = None,
         new_name: str | None = None,
-        trashed: bool | None = None,
     ) -> Node:
-        """Move, rename, or trash/restore a node.
+        """Relocate or rename a node.
 
-        Performs one or more operations on the node. At least one
-        parameter must be non-None.
+        At least one parameter must be non-None.
 
         Args:
             node: The Node to modify.
             new_parent: New parent directory, or None to keep current.
             new_name: New name, or None to keep current.
-            trashed: True to trash, False to restore, None to leave unchanged.
 
         Returns:
             New Node instance with updated properties.
@@ -1988,62 +1970,36 @@ class Drive(metaclass=ABCMeta):
             AuthenticationError: If not authenticated.
             ValueError: If all parameters are None, or if trying to move
                 root node, or if new_name contains invalid characters.
-
-        Example:
-            Renaming a file::
-
-                >>> node = await drive.get_node_by_path(PurePath("/old.txt"))
-                >>> updated = await drive.move(node, new_name="new.txt")
-                >>> print(f"Renamed to: {updated.name}")
-
-            Moving to different directory::
-
-                >>> file = await drive.get_node_by_path(PurePath("/file.txt"))
-                >>> docs = await drive.get_node_by_path(PurePath("/Documents"))
-                >>> moved = await drive.move(file, new_parent=docs)
-
-            Moving to trash::
-
-                >>> node = await drive.get_node_by_path(PurePath("/temp.txt"))
-                >>> trashed_node = await drive.move(node, trashed=True)
-                >>> assert trashed_node.is_trashed
-
-            Using higher-level helper::
-
-                >>> from wcpan.drive.core.lib import move_node
-                >>> from pathlib import PurePath
-                >>> moved = await move_node(
-                ...     drive,
-                ...     PurePath("/old/path/file.txt"),
-                ...     PurePath("/new/path/file.txt"),
-                ... )
         """
 
     @abstractmethod
-    async def delete(self, node: Node) -> None:
-        """Permanently delete a node.
+    async def delete(self, node: Node, *, permanent: bool = False) -> None:
+        """Delete a node.
 
-        Removes the node from the cloud storage permanently. This operation
-        cannot be undone. For recoverable deletion, use move() with
-        trashed=True instead.
+        Soft-deletes by default (best-effort per backend). Pass permanent=True
+        for a hard delete that cannot be undone.
 
         Args:
-            node: The Node to permanently delete.
+            node: The Node to delete.
+            permanent: If True, permanently delete. If False (default),
+                soft-delete (e.g. move to trash).
 
         Raises:
             AuthenticationError: If not authenticated.
+        """
 
-        Example:
-            Deleting a file::
+    @abstractmethod
+    async def restore(self, node: Node) -> Node:
+        """Restore a trashed node.
 
-                >>> node = await drive.get_node_by_path(PurePath("/temp.txt"))
-                >>> await drive.delete(node)
+        Args:
+            node: The trashed Node to restore.
 
-            Safe deletion with confirmation::
+        Returns:
+            Updated Node instance reflecting the restored state.
 
-                >>> node = await drive.get_node_by_path(path)
-                >>> if confirm(f"Really delete {node.name}?"):
-                ...     await drive.delete(node)
+        Raises:
+            NotImplementedError: If backend doesn't support restore.
         """
 
     @abstractmethod
