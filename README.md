@@ -7,7 +7,7 @@ This package provides the core abstractions only. It requires a
 
 ## Documentation
 
-See the full documentation on [Read the Docs](https://wcpan-drive-core.readthedocs.io).
+See the full documentation on [Read the Docs](https://wcpandrivecore.readthedocs.io/).
 
 ## Quick Example
 
