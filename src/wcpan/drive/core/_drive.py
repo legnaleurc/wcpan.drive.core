@@ -43,33 +43,6 @@ _API_VERSION = 5
 _VIRTUAL_ROOT_ID = ""
 
 
-class _ScopedWritableFile(WritableFile):
-    def __init__(self, source: str, file: WritableFile) -> None:
-        self._source = source
-        self._file = file
-
-    @override
-    async def tell(self) -> int:
-        return await self._file.tell()
-
-    @override
-    async def seek(self, offset: int) -> int:
-        return await self._file.seek(offset)
-
-    @override
-    async def write(self, chunk: bytes) -> int:
-        return await self._file.write(chunk)
-
-    @override
-    async def flush(self) -> None:
-        await self._file.flush()
-
-    @override
-    async def node(self) -> Node:
-        node = await self._file.node()
-        return _scope_node(self._source, node)
-
-
 def compose_service[T: Service](
     base: CreateService[T],
     *middleware: CreateServiceMiddleware[T],
@@ -162,82 +135,6 @@ async def create_drive(
         sources=[SourceConfig(name="", file=file, snapshot=snapshot)]
     ) as drive:
         yield drive
-
-
-@asynccontextmanager
-async def _create_service[T: Service](create_service: CreateService[T]):
-    async with create_service() as service:
-        if service.api_version != _API_VERSION:
-            raise InvalidServiceError(
-                f"invalid version: required {_API_VERSION}, got {service.api_version}"
-            )
-        yield service
-
-
-@dataclass
-class _SourceState:
-    file_service: FileService
-    snapshot_service: SnapshotService
-    lock: Lock = field(default_factory=Lock)
-
-
-def _scope_id(source: str, original_id: str) -> str:
-    return f"{source}:{original_id}"
-
-
-def _parse_id(scoped_id: str) -> tuple[str, str]:
-    source, _, original_id = scoped_id.partition(":")
-    return source, original_id
-
-
-def _scope_node(source: str, node: Node) -> Node:
-    new_parent_id = (
-        _VIRTUAL_ROOT_ID
-        if node.parent_id is None
-        else _scope_id(source, node.parent_id)
-    )
-    return replace(node, id=_scope_id(source, node.id), parent_id=new_parent_id)
-
-
-def _unscope_node(source: str, node: Node) -> Node:
-    _, original_id = _parse_id(node.id)
-    if node.parent_id == _VIRTUAL_ROOT_ID:
-        original_parent_id = None
-    elif node.parent_id is None:
-        original_parent_id = None
-    else:
-        _, original_parent_id = _parse_id(node.parent_id)
-    return replace(node, id=original_id, parent_id=original_parent_id)
-
-
-def _scope_change(source: str, change: ChangeAction) -> ChangeAction:
-    match change:
-        case (True, id_):
-            return (True, _scope_id(source, id_))
-        case (False, node):
-            return (False, _scope_node(source, node))
-
-
-def _make_virtual_root() -> Node:
-    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
-    return Node(
-        id=_VIRTUAL_ROOT_ID,
-        parent_id=None,
-        name="",
-        is_directory=True,
-        is_trashed=False,
-        ctime=epoch,
-        mtime=epoch,
-        mime_type="",
-        hash="",
-        size=0,
-        is_image=False,
-        is_video=False,
-        width=0,
-        height=0,
-        ms_duration=0,
-        private=None,
-    )
 
 
 class _SingleDrive(Drive):
@@ -877,6 +774,50 @@ class _MultiDrive(Drive):
             await state.file_service.authenticate()
 
 
+class _ScopedWritableFile(WritableFile):
+    def __init__(self, source: str, file: WritableFile) -> None:
+        self._source = source
+        self._file = file
+
+    @override
+    async def tell(self) -> int:
+        return await self._file.tell()
+
+    @override
+    async def seek(self, offset: int) -> int:
+        return await self._file.seek(offset)
+
+    @override
+    async def write(self, chunk: bytes) -> int:
+        return await self._file.write(chunk)
+
+    @override
+    async def flush(self) -> None:
+        await self._file.flush()
+
+    @override
+    async def node(self) -> Node:
+        node = await self._file.node()
+        return _scope_node(self._source, node)
+
+
+@dataclass
+class _SourceState:
+    file_service: FileService
+    snapshot_service: SnapshotService
+    lock: Lock = field(default_factory=Lock)
+
+
+@asynccontextmanager
+async def _create_service[T: Service](create_service: CreateService[T]):
+    async with create_service() as service:
+        if service.api_version != _API_VERSION:
+            raise InvalidServiceError(
+                f"invalid version: required {_API_VERSION}, got {service.api_version}"
+            )
+        yield service
+
+
 def _in_ancestor_set(
     table: dict[str, Node], node: Node, ancestor_set: set[str]
 ) -> bool:
@@ -907,3 +848,62 @@ async def _contains(drive: Drive, ancestor: Node, node: Node) -> bool:
         node = await drive.get_node_by_id(node.parent_id)
         if node.id in visited:
             raise RuntimeError("detected node cycle")
+
+
+def _scope_id(source: str, original_id: str) -> str:
+    return f"{source}:{original_id}"
+
+
+def _parse_id(scoped_id: str) -> tuple[str, str]:
+    source, _, original_id = scoped_id.partition(":")
+    return source, original_id
+
+
+def _scope_node(source: str, node: Node) -> Node:
+    new_parent_id = (
+        _VIRTUAL_ROOT_ID
+        if node.parent_id is None
+        else _scope_id(source, node.parent_id)
+    )
+    return replace(node, id=_scope_id(source, node.id), parent_id=new_parent_id)
+
+
+def _unscope_node(source: str, node: Node) -> Node:
+    _, original_id = _parse_id(node.id)
+    if node.parent_id == _VIRTUAL_ROOT_ID:
+        original_parent_id = None
+    elif node.parent_id is None:
+        original_parent_id = None
+    else:
+        _, original_parent_id = _parse_id(node.parent_id)
+    return replace(node, id=original_id, parent_id=original_parent_id)
+
+
+def _scope_change(source: str, change: ChangeAction) -> ChangeAction:
+    match change:
+        case (True, id_):
+            return (True, _scope_id(source, id_))
+        case (False, node):
+            return (False, _scope_node(source, node))
+
+
+def _make_virtual_root() -> Node:
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    return Node(
+        id=_VIRTUAL_ROOT_ID,
+        parent_id=None,
+        name="",
+        is_directory=True,
+        is_trashed=False,
+        ctime=epoch,
+        mtime=epoch,
+        mime_type="",
+        hash="",
+        size=0,
+        is_image=False,
+        is_video=False,
+        width=0,
+        height=0,
+        ms_duration=0,
+        private=None,
+    )
