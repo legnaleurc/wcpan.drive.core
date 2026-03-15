@@ -394,6 +394,13 @@ class _SingleDrive(Drive):
         return await self._fs.authenticate()
 
 
+@dataclass
+class _SourceState:
+    file_service: FileService
+    snapshot_service: SnapshotService
+    lock: Lock = field(default_factory=Lock)
+
+
 class _MultiDrive(Drive):
     def __init__(self, sources: dict[str, _SourceState]) -> None:
         self._sources = sources
@@ -799,13 +806,6 @@ class _ScopedWritableFile(WritableFile):
     async def node(self) -> Node:
         node = await self._file.node()
         return _scope_node(self._source, node)
-
-
-@dataclass
-class _SourceState:
-    file_service: FileService
-    snapshot_service: SnapshotService
-    lock: Lock = field(default_factory=Lock)
 
 
 @asynccontextmanager
