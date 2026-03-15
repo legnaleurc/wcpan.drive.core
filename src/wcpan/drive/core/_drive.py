@@ -43,6 +43,33 @@ _API_VERSION = 5
 _VIRTUAL_ROOT_ID = ""
 
 
+class _ScopedWritableFile(WritableFile):
+    def __init__(self, source: str, file: WritableFile) -> None:
+        self._source = source
+        self._file = file
+
+    @override
+    async def tell(self) -> int:
+        return await self._file.tell()
+
+    @override
+    async def seek(self, offset: int) -> int:
+        return await self._file.seek(offset)
+
+    @override
+    async def write(self, chunk: bytes) -> int:
+        return await self._file.write(chunk)
+
+    @override
+    async def flush(self) -> None:
+        await self._file.flush()
+
+    @override
+    async def node(self) -> Node:
+        node = await self._file.node()
+        return _scope_node(self._source, node)
+
+
 def compose_service[T: Service](
     base: CreateService[T],
     *middleware: CreateServiceMiddleware[T],
@@ -702,7 +729,7 @@ class _MultiDrive(Drive):
             media_info=media_info,
             private=None,
         ) as file:
-            yield file
+            yield _ScopedWritableFile(source_name, file)
 
     @override
     async def purge_trash(self) -> None:
