@@ -40,7 +40,7 @@ from .types import (
 
 _API_VERSION = 5
 
-_VIRTUAL_ROOT_ID = ""
+_VIRTUAL_ROOT_ID = "__virtual_root__"
 
 
 def compose_service[T: Service](
